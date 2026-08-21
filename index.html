@@ -5,8 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ATS Resume Builder</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
     <style>
-        /* Custom styles for accordions and printing */
         .accordion-content {
             transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
             max-height: 0;
@@ -14,7 +17,7 @@
             overflow: hidden;
         }
         .accordion-content.open {
-            max-height: 3000px; /* Large enough to fit content */
+            max-height: 3000px; 
             opacity: 1;
         }
         .chevron {
@@ -37,8 +40,31 @@
 </head>
 <body class="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-800">
 
+    <div id="crop-modal" class="fixed inset-0 bg-slate-900/80 hidden z-[100] flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
+            <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                <h3 class="text-lg font-bold text-slate-800 tracking-tight">Crop Photo</h3>
+                <button id="btn-close-modal" class="text-slate-400 hover:text-red-500 transition-colors focus:outline-none">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="p-4 bg-slate-800 flex justify-center items-center w-full" style="height: 50vh; min-height: 300px;">
+                <div class="w-full h-full relative">
+                    <img id="image-to-crop" src="" alt="To Crop" class="max-w-full max-h-full block hidden">
+                </div>
+            </div>
+            <div class="p-4 border-t border-slate-200 flex justify-end space-x-3 bg-slate-50">
+                <button id="btn-cancel-crop" class="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-sm">Cancel</button>
+                <button id="btn-apply-crop" class="px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center space-x-2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"></path><path d="M18 22V8a2 2 0 0 0-2-2H2"></path></svg>
+                    <span>Crop & Save</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Mobile Header / Tabs -->
-    <header class="bg-white shadow-sm print-hidden lg:hidden flex justify-between items-center p-4">
+    <header class="bg-white shadow-sm print-hidden lg:hidden flex justify-between items-center p-4 sticky top-0 z-50">
         <h1 class="text-xl font-bold text-slate-800 tracking-tight">ATS Builder</h1>
         <div class="flex space-x-2">
             <button id="tab-edit" onclick="switchTab('edit')" class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 text-white">Edit</button>
@@ -47,14 +73,14 @@
     </header>
 
     <!-- Main Content -->
-    <main class="flex-1 flex overflow-hidden flex-col lg:flex-row">
+    <main class="flex-1 flex overflow-hidden flex-col lg:flex-row relative">
         
         <!-- LEFT PANEL: Form Editor -->
         <section id="panel-edit" class="w-full lg:w-[45%] xl:w-[40%] bg-white border-r border-slate-200 overflow-y-auto print-hidden block lg:block">
             <div class="p-6">
                 <div class="hidden lg:flex justify-between items-center mb-8">
-                    <h1 class="text-2xl font-bold tracking-tight">Resume Data</h1>
-                    <p class="text-sm text-slate-500 font-medium">Auto-updates preview</p>
+                    <h1 class="text-2xl font-bold tracking-tight text-slate-800">Resume Data</h1>
+                    <p class="text-sm text-slate-500 font-medium bg-slate-100 px-3 py-1 rounded-full">Auto-updates preview</p>
                 </div>
 
                 <div class="space-y-6 pb-20">
@@ -79,6 +105,15 @@
                                 <div class="flex flex-col space-y-1.5"><label class="text-sm font-semibold">Location</label><input type="text" id="p-location" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
                                 <div class="flex flex-col space-y-1.5"><label class="text-sm font-semibold">LinkedIn</label><input type="text" id="p-linkedin" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
                                 <div class="flex flex-col space-y-1.5 md:col-span-2"><label class="text-sm font-semibold">GitHub / Portfolio</label><input type="text" id="p-github" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
+                                
+                                <div class="flex flex-col space-y-1.5 md:col-span-2">
+                                    <label class="text-sm font-semibold">Photograph (Optional)</label>
+                                    <div class="flex items-center space-x-3">
+                                        <input type="file" id="p-photo" accept="image/*" class="form-input flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                                        <button id="btn-clear-photo" class="hidden px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-semibold border border-red-200 hover:bg-red-100 transition-colors shadow-sm">Clear</button>
+                                    </div>
+                                    <p class="text-xs text-slate-500">Note: Expected in certain regions (e.g., Germany, UAE) but strictly avoided in others (e.g., US, UK) for ATS compliance.</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -183,7 +218,7 @@
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
                         <span>ATS Compliant Preview</span>
                     </div>
-                    <button onclick="downloadPDF()" class="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg shadow-lg font-medium transition-all hover:-translate-y-0.5">
+                    <button onclick="handleDownloadPDF()" class="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg shadow-lg font-medium transition-all hover:-translate-y-0.5">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                         <span>Download PDF</span>
                     </button>
@@ -203,7 +238,7 @@
         let data = {
             personal: {
                 fullName: 'Alex Jonathan Doe', jobTitle: 'Software Engineer', email: 'alex.doe@example.com', 
-                phone: '+1 (555) 123-4567', location: 'San Francisco, CA', linkedin: 'linkedin.com/in/alexdoe', github: 'github.com/alexdoe'
+                phone: '+1 (555) 123-4567', location: 'San Francisco, CA', linkedin: 'linkedin.com/in/alexdoe', github: 'github.com/alexdoe', photo: ''
             },
             summary: 'Detail-oriented and highly adaptable Software Engineer with 5+ years of experience in full-stack web development. Proven track record of architecting scalable applications and improving system performance.',
             experience: [
@@ -235,6 +270,82 @@
             document.getElementById('f-summary').addEventListener('input', (e) => { data.summary = e.target.value; renderPreview(); });
             document.getElementById('f-skills').addEventListener('input', (e) => { data.skills = e.target.value; renderPreview(); });
 
+            // Photo & Cropping Listeners
+            const photoInput = document.getElementById('p-photo');
+            const clearPhotoBtn = document.getElementById('btn-clear-photo');
+            const cropModal = document.getElementById('crop-modal');
+            const imageToCrop = document.getElementById('image-to-crop');
+            const btnApplyCrop = document.getElementById('btn-apply-crop');
+            const btnCancelCrop = document.getElementById('btn-cancel-crop');
+            const btnCloseModal = document.getElementById('btn-close-modal');
+            let cropper = null;
+            
+            photoInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        imageToCrop.src = event.target.result;
+                        imageToCrop.classList.remove('hidden');
+                        cropModal.classList.remove('hidden');
+                        
+                        // Destroy existing cropper if it exists
+                        if (cropper) { cropper.destroy(); }
+                        
+                        // Initialize CropperJS
+                        cropper = new Cropper(imageToCrop, {
+                            aspectRatio: 3 / 4, // 3:4 ratio matches the w-24 h-32 styling in the preview
+                            viewMode: 1, 
+                            dragMode: 'move', 
+                            autoCropArea: 0.8,
+                            restore: false,
+                            guides: true,
+                            center: true,
+                            highlight: false,
+                            cropBoxMovable: true,
+                            cropBoxResizable: true,
+                            toggleDragModeOnDblclick: false,
+                        });
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            function closeCropModal() {
+                cropModal.classList.add('hidden');
+                photoInput.value = ''; // Reset file input so same file can be selected again
+                imageToCrop.classList.add('hidden');
+                if (cropper) {
+                    cropper.destroy();
+                    cropper = null;
+                }
+            }
+
+            btnCancelCrop.addEventListener('click', closeCropModal);
+            btnCloseModal.addEventListener('click', closeCropModal);
+
+            btnApplyCrop.addEventListener('click', () => {
+                if (!cropper) return;
+                
+                // Get the cropped canvas and convert to Base64 data URL
+                const canvas = cropper.getCroppedCanvas({
+                    width: 300, 
+                    height: 400
+                });
+                
+                data.personal.photo = canvas.toDataURL('image/jpeg', 0.9);
+                clearPhotoBtn.classList.remove('hidden');
+                renderPreview();
+                closeCropModal();
+            });
+
+            clearPhotoBtn.addEventListener('click', (e) => {
+                photoInput.value = '';
+                data.personal.photo = '';
+                clearPhotoBtn.classList.add('hidden');
+                renderPreview();
+            });
+
             // Dynamic Lists Event Delegation (Experience)
             document.getElementById('experience-container').addEventListener('input', (e) => {
                 if (e.target.classList.contains('dyn-input')) {
@@ -259,7 +370,9 @@
         // --- Form Rendering Functions ---
         function initFormValues() {
             Object.keys(data.personal).forEach(key => {
-                if (document.getElementById(`p-${key}`)) document.getElementById(`p-${key}`).value = data.personal[key];
+                if (document.getElementById(`p-${key}`) && key !== 'photo') {
+                    document.getElementById(`p-${key}`).value = data.personal[key];
+                }
             });
             document.getElementById('f-summary').value = data.summary;
             document.getElementById('f-skills').value = data.skills;
@@ -323,25 +436,51 @@
             renderEducationForms(); renderPreview();
         }
 
+        // --- PDF Download Handling ---
+        function handleDownloadPDF() {
+            // Save the original document title
+            const originalTitle = document.title;
+            
+            // Construct the new filename based on Name_job_position
+            const namePart = data.personal.fullName ? data.personal.fullName.trim().replace(/\s+/g, '_') : 'Name';
+            const jobPart = data.personal.jobTitle ? data.personal.jobTitle.trim().replace(/\s+/g, '_') : 'job_position';
+            
+            // Temporarily set the document title so the browser uses it as the default save name
+            document.title = `${namePart}_${jobPart}`;
+            
+            // Trigger the native print dialog
+            window.print();
+            
+            // Restore the original document title
+            document.title = originalTitle;
+        }
+
         // --- Preview Rendering Logic ---
         function renderPreview() {
             const p = data.personal;
             let html = `
-                <header class="text-center mb-6 pb-4 border-b-[1.5px] border-black">
-                    <h1 class="text-3xl sm:text-4xl font-bold uppercase tracking-wide mb-2">${escapeHtml(p.fullName) || 'YOUR NAME'}</h1>
-                    ${p.jobTitle ? `<h2 class="text-lg text-gray-800 mb-3">${escapeHtml(p.jobTitle)}</h2>` : ''}
-                    
-                    <div class="flex flex-wrap justify-center items-center gap-x-3 gap-y-1 text-sm sm:text-base text-gray-800">
-                        ${p.location ? `<span>${escapeHtml(p.location)}</span>` : ''}
-                        ${p.phone ? `${p.location ? '<span class="text-gray-400">|</span>' : ''}<span>${escapeHtml(p.phone)}</span>` : ''}
-                        ${p.email ? `${(p.location || p.phone) ? '<span class="text-gray-400">|</span>' : ''}<a href="mailto:${escapeHtml(p.email)}" class="hover:underline">${escapeHtml(p.email)}</a>` : ''}
+                <header class="mb-6 pb-4 border-b-[1.5px] border-black flex items-center ${p.photo ? 'justify-between text-left' : 'flex-col text-center'}">
+                    <div class="${p.photo ? 'flex-1' : ''}">
+                        <h1 class="text-3xl sm:text-4xl font-bold uppercase tracking-wide mb-2">${escapeHtml(p.fullName) || 'YOUR NAME'}</h1>
+                        ${p.jobTitle ? `<h2 class="text-lg text-gray-800 mb-3">${escapeHtml(p.jobTitle)}</h2>` : ''}
+                        
+                        <div class="flex flex-wrap ${p.photo ? 'justify-start' : 'justify-center'} items-center gap-x-3 gap-y-1 text-sm sm:text-base text-gray-800">
+                            ${p.location ? `<span>${escapeHtml(p.location)}</span>` : ''}
+                            ${p.phone ? `${p.location ? '<span class="text-gray-400">|</span>' : ''}<span>${escapeHtml(p.phone)}</span>` : ''}
+                            ${p.email ? `${(p.location || p.phone) ? '<span class="text-gray-400">|</span>' : ''}<a href="mailto:${escapeHtml(p.email)}" class="hover:underline">${escapeHtml(p.email)}</a>` : ''}
+                        </div>
+                        
+                        <div class="flex flex-wrap ${p.photo ? 'justify-start' : 'justify-center'} items-center gap-x-3 gap-y-1 text-sm sm:text-base text-gray-800 mt-1">
+                            ${p.linkedin ? `<a href="https://${escapeHtml(p.linkedin).replace(/^https?:\/\//, '')}" class="hover:underline">${escapeHtml(p.linkedin).replace(/^https?:\/\//, '')}</a>` : ''}
+                            ${(p.linkedin && p.github) ? '<span class="text-gray-400">|</span>' : ''}
+                            ${p.github ? `<a href="https://${escapeHtml(p.github).replace(/^https?:\/\//, '')}" class="hover:underline">${escapeHtml(p.github).replace(/^https?:\/\//, '')}</a>` : ''}
+                        </div>
                     </div>
-                    
-                    <div class="flex flex-wrap justify-center items-center gap-x-3 gap-y-1 text-sm sm:text-base text-gray-800 mt-1">
-                        ${p.linkedin ? `<a href="https://${escapeHtml(p.linkedin).replace(/^https?:\/\//, '')}" class="hover:underline">${escapeHtml(p.linkedin).replace(/^https?:\/\//, '')}</a>` : ''}
-                        ${(p.linkedin && p.github) ? '<span class="text-gray-400">|</span>' : ''}
-                        ${p.github ? `<a href="https://${escapeHtml(p.github).replace(/^https?:\/\//, '')}" class="hover:underline">${escapeHtml(p.github).replace(/^https?:\/\//, '')}</a>` : ''}
+                    ${p.photo ? `
+                    <div class="ml-6 shrink-0">
+                        <img src="${p.photo}" alt="Profile Photo" class="w-24 h-32 sm:w-28 sm:h-36 object-cover rounded-md border border-gray-300 shadow-sm" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">
                     </div>
+                    ` : ''}
                 </header>
             `;
 
@@ -403,24 +542,6 @@
         }
 
         // --- Utility Functions ---
-        function downloadPDF() {
-            // Save the original title
-            const originalTitle = document.title;
-            
-            // Construct the new title for the PDF filename
-            const name = data.personal.fullName ? data.personal.fullName.replace(/\s+/g, '_') : 'Resume';
-            const jobPosition = data.personal.jobTitle ? data.personal.jobTitle.replace(/\s+/g, '_') : 'Applicant';
-            document.title = `${name}_${jobPosition}`;
-            
-            // Trigger print dialog
-            window.print();
-            
-            // Restore original title after a short delay to ensure print dialog grabs the new one
-            setTimeout(() => {
-                document.title = originalTitle;
-            }, 100);
-        }
-
         function escapeHtml(unsafe) {
             if (!unsafe) return '';
             return unsafe.toString()
