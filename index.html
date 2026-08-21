@@ -78,9 +78,23 @@
         <!-- LEFT PANEL: Form Editor -->
         <section id="panel-edit" class="w-full lg:w-[45%] xl:w-[40%] bg-white border-r border-slate-200 overflow-y-auto print-hidden block lg:block">
             <div class="p-6">
-                <div class="hidden lg:flex justify-between items-center mb-8">
+                <div class="flex justify-between items-center mb-8">
                     <h1 class="text-2xl font-bold tracking-tight text-slate-800">Resume Data</h1>
-                    <p class="text-sm text-slate-500 font-medium bg-slate-100 px-3 py-1 rounded-full">Auto-updates preview</p>
+                    <div class="flex items-center space-x-2">
+                        <span id="auto-save-indicator" class="text-xs text-green-600 font-medium mr-1 opacity-0 transition-opacity flex items-center space-x-1">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                            <span class="hidden md:inline">Auto-saved</span>
+                        </span>
+                        <button id="btn-export-data" onclick="exportData()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-colors flex items-center space-x-1 shadow-sm" title="Export Backup (JSON)">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            <span class="hidden sm:inline" id="save-text">Export</span>
+                        </button>
+                        <button id="btn-import-trigger" onclick="triggerLoad()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-colors flex items-center space-x-1 shadow-sm" title="Import Backup (JSON)">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                            <span class="hidden sm:inline">Import</span>
+                        </button>
+                        <input type="file" id="file-import" accept=".json" class="hidden" onchange="importData(event)">
+                    </div>
                 </div>
 
                 <div class="space-y-6 pb-20">
@@ -194,12 +208,22 @@
                             <svg id="chevron-skills" class="chevron text-slate-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                         </button>
                         <div id="acc-skills" class="accordion-content">
-                            <div class="p-4 border-t border-slate-100">
+                            <div class="p-4 border-t border-slate-100 space-y-4">
+                                <!-- AI Skill Extractor Box -->
+                                <div class="flex flex-col space-y-1.5 p-4 bg-purple-50 rounded-lg border border-purple-100">
+                                    <label class="text-sm font-semibold text-purple-900">✨ AI Skill Extractor</label>
+                                    <p class="text-xs text-purple-700 mb-2">Paste the job description. Our AI will search the web for industry standards and extract the exact keywords you need to pass the ATS.</p>
+                                    <textarea id="f-job-description" rows="3" class="form-input px-3 py-2 bg-white border border-purple-200 rounded-lg shadow-sm focus:ring-2 focus:ring-purple-500 focus:outline-none resize-y" placeholder="Paste the job description here..."></textarea>
+                                    <button id="btn-extract-skills" onclick="extractSkillsFromJD()" class="mt-2 w-full py-2.5 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 transition-colors shadow-sm flex items-center justify-center space-x-2">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+                                        <span>Auto-Extract & Search Skills</span>
+                                    </button>
+                                </div>
                                 <div class="flex flex-col space-y-1.5">
                                     <label class="text-sm font-semibold">Core Skills (Comma separated)</label>
                                     <textarea id="f-skills" rows="4" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none resize-y" placeholder="JavaScript, React, Agile..."></textarea>
                                 </div>
-                                <p class="mt-2 text-xs text-slate-500">ATS parsers look for exact keyword matches. Ensure you list hard skills directly found in the job description.</p>
+                                <p class="text-xs text-slate-500">ATS parsers look for exact keyword matches. Ensure you list hard skills directly found in the job description.</p>
                             </div>
                         </div>
                     </div>
@@ -235,7 +259,9 @@
 
     <script>
         // --- State Management ---
-        let data = {
+        let currentFileHandle = null; // Tracks the currently opened/saved file handle to overwrite it
+        
+        const defaultData = {
             personal: {
                 fullName: 'Alex Jonathan Doe', jobTitle: 'Software Engineer', email: 'alex.doe@example.com', 
                 phone: '+1 (555) 123-4567', location: 'San Francisco, CA', linkedin: 'linkedin.com/in/alexdoe', github: 'github.com/alexdoe', photo: ''
@@ -250,12 +276,41 @@
             skills: 'JavaScript, TypeScript, React, Node.js, Python, SQL, Docker, AWS, Git, Agile Methodologies'
         };
 
+        // Initialize from Memory if available
+        const STORAGE_KEY = 'ats_resume_builder_memory';
+        const savedMemory = localStorage.getItem(STORAGE_KEY);
+        let data = savedMemory ? JSON.parse(savedMemory) : JSON.parse(JSON.stringify(defaultData));
+
+        let saveTimeout;
+        function saveToMemory() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                const indicator = document.getElementById('auto-save-indicator');
+                if (indicator) {
+                    indicator.classList.remove('opacity-0');
+                    clearTimeout(saveTimeout);
+                    saveTimeout = setTimeout(() => {
+                        indicator.classList.add('opacity-0');
+                    }, 2000);
+                }
+            } catch (e) {
+                console.warn("Could not save to local storage (image file may be too large).", e);
+            }
+        }
+
         // --- Initialization & Event Listeners ---
         document.addEventListener('DOMContentLoaded', () => {
             initFormValues();
+            
+            // Check if photo exists to show clear button on load
+            const clearPhotoBtn = document.getElementById('btn-clear-photo');
+            if (data.personal.photo && clearPhotoBtn) {
+                clearPhotoBtn.classList.remove('hidden');
+            }
+            
             renderExperienceForms();
             renderEducationForms();
-            renderPreview();
+            renderPreview(false); // Do not flash auto-save on initial load
 
             // Personal Info Listeners
             const personalFields = ['fullName', 'jobTitle', 'email', 'phone', 'location', 'linkedin', 'github'];
@@ -272,7 +327,6 @@
 
             // Photo & Cropping Listeners
             const photoInput = document.getElementById('p-photo');
-            const clearPhotoBtn = document.getElementById('btn-clear-photo');
             const cropModal = document.getElementById('crop-modal');
             const imageToCrop = document.getElementById('image-to-crop');
             const btnApplyCrop = document.getElementById('btn-apply-crop');
@@ -436,6 +490,142 @@
             renderEducationForms(); renderPreview();
         }
 
+        async function exportData() {
+            const dataStr = JSON.stringify(data, null, 2);
+            const btn = document.getElementById('btn-export-data');
+            const originalHtml = btn.innerHTML;
+            let saveSuccess = false;
+            
+            try {
+                // Try modern File System Access API first to overwrite the same file
+                if (window.showSaveFilePicker) {
+                    if (!currentFileHandle) {
+                        const namePart = data.personal.fullName ? data.personal.fullName.trim().replace(/\s+/g, '_') : 'Resume';
+                        currentFileHandle = await window.showSaveFilePicker({
+                            suggestedName: `${namePart}_Data.json`,
+                            types: [{
+                                description: 'JSON File',
+                                accept: {'application/json': ['.json']},
+                            }],
+                        });
+                    }
+                    // Write data to the existing file handle
+                    const writable = await currentFileHandle.createWritable();
+                    await writable.write(dataStr);
+                    await writable.close();
+                    saveSuccess = true;
+                } else {
+                    // Fallback for older browsers
+                    fallbackDownload(dataStr);
+                    saveSuccess = true;
+                }
+            } catch (err) {
+                // If the browser blocks the API (e.g., inside an iframe), trigger the fallback
+                if (err.name !== 'AbortError') {
+                    console.warn("File System API blocked by iframe security. Using fallback download.");
+                    fallbackDownload(dataStr);
+                    saveSuccess = true;
+                }
+            }
+
+            if (saveSuccess) {
+                // Show success feedback
+                btn.classList.replace('text-slate-700', 'text-green-600');
+                btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span class="hidden sm:inline">Saved!</span>`;
+                setTimeout(() => {
+                    btn.innerHTML = originalHtml;
+                    btn.classList.replace('text-green-600', 'text-slate-700');
+                }, 2000);
+            }
+        }
+
+        function fallbackDownload(dataStr) {
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const namePart = data.personal.fullName ? data.personal.fullName.trim().replace(/\s+/g, '_') : 'Resume';
+            a.download = `${namePart}_Data.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        async function triggerLoad() {
+            // Try to capture file handle via File System Access API
+            if (window.showOpenFilePicker) {
+                try {
+                    const [fileHandle] = await window.showOpenFilePicker({
+                        types: [{
+                            description: 'JSON File',
+                            accept: {'application/json': ['.json']},
+                        }],
+                    });
+                    currentFileHandle = fileHandle;
+                    const file = await fileHandle.getFile();
+                    processLoadedFile(file);
+                } catch (err) {
+                    // Fallback if blocked by security
+                    if (err.name !== 'AbortError') {
+                        console.warn("File System API blocked by iframe security. Using fallback upload.");
+                        document.getElementById('file-import').click();
+                    }
+                }
+            } else {
+                // Fallback to traditional hidden input
+                document.getElementById('file-import').click();
+            }
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            currentFileHandle = null; // Reset handle because we used legacy input
+            processLoadedFile(file);
+            event.target.value = ''; // Reset input
+        }
+
+        function processLoadedFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    if (importedData && importedData.personal) {
+                        data = importedData;
+                        
+                        // Update UI and re-render
+                        initFormValues();
+                        
+                        // Handle photograph clear button visibility
+                        const clearPhotoBtn = document.getElementById('btn-clear-photo');
+                        if (data.personal.photo && clearPhotoBtn) {
+                            clearPhotoBtn.classList.remove('hidden');
+                        } else if (clearPhotoBtn) {
+                            clearPhotoBtn.classList.add('hidden');
+                        }
+                        
+                        renderExperienceForms();
+                        renderEducationForms();
+                        renderPreview();
+                        
+                        // Visual feedback on the load button
+                        const btn = document.getElementById('btn-import-trigger');
+                        const originalHtml = btn.innerHTML;
+                        btn.classList.replace('text-slate-700', 'text-green-600');
+                        btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span class="hidden sm:inline">Loaded!</span>`;
+                        setTimeout(() => {
+                            btn.innerHTML = originalHtml;
+                            btn.classList.replace('text-green-600', 'text-slate-700');
+                        }, 2500);
+                    }
+                } catch(err) {
+                    console.error("Failed to parse JSON file", err);
+                }
+            };
+            reader.readAsText(file);
+        }
+
         // --- PDF Download Handling ---
         function handleDownloadPDF() {
             // Save the original document title
@@ -456,7 +646,11 @@
         }
 
         // --- Preview Rendering Logic ---
-        function renderPreview() {
+        function renderPreview(autoSave = true) {
+            if (autoSave) {
+                saveToMemory();
+            }
+
             const p = data.personal;
             let html = `
                 <header class="mb-6 pb-4 border-b-[1.5px] border-black flex items-center ${p.photo ? 'justify-between text-left' : 'flex-col text-center'}">
@@ -601,6 +795,84 @@
                 tabEdit.classList.replace('bg-blue-600', 'bg-slate-100');
                 tabEdit.classList.replace('text-white', 'text-slate-600');
             }
+        }
+
+        // --- AI Skill Extraction logic ---
+        async function extractSkillsFromJD() {
+            const jdText = document.getElementById('f-job-description').value;
+            if (!jdText.trim()) return;
+
+            const btn = document.getElementById('btn-extract-skills');
+            const originalText = btn.innerHTML;
+            
+            // Show loading spinner
+            btn.innerHTML = '<svg class="animate-spin h-4 w-4 text-white mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Analyzing & Searching...';
+            btn.disabled = true;
+
+            try {
+                // We ask the LLM to search the internet to augment the JD skills, returning only CSV formatting.
+                const prompt = `Act as an expert ATS resume optimizer. I am applying for a job with the following description. Search the internet to find the most common and relevant industry skills for this specific role and domain, and combine them with the skills explicitly mentioned in this job description. Return ONLY a single comma-separated list of these skills (e.g., JavaScript, Agile, Project Management). Do not include any introductory text, outro, markdown formatting, or bullet points.\n\nJob Description:\n${jdText}`;
+                
+                const payload = {
+                    contents: [{ parts: [{ text: prompt }] }],
+                    tools: [{ "google_search": {} }] // Enable Google Search Grounding
+                };
+                
+                // The empty string allows the Canvas environment to dynamically provide the API key
+                const apiKey = ""; 
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+                
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    // Clean up response text
+                    const extractedSkills = candidate.content.parts[0].text.trim().replace(/^\s*,|,\s*$/g, '');
+                    
+                    // Smart merge with existing skills so we don't overwrite user data
+                    const currentSkills = data.skills.trim();
+                    if (currentSkills) {
+                        const currentArr = currentSkills.split(',').map(s => s.trim()).filter(s => s);
+                        const newArr = extractedSkills.split(',').map(s => s.trim()).filter(s => s);
+                        const merged = [...new Set([...currentArr, ...newArr])]; // Deduplicate
+                        data.skills = merged.join(', ');
+                    } else {
+                        data.skills = extractedSkills;
+                    }
+                    
+                    // Update UI State
+                    document.getElementById('f-skills').value = data.skills;
+                    renderPreview();
+                    
+                    // Show a brief success state
+                    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><polyline points="20 6 9 17 4 12"></polyline></svg> Added Successfully!';
+                    btn.classList.replace('bg-purple-600', 'bg-green-600');
+                    btn.classList.replace('hover:bg-purple-700', 'hover:bg-green-700');
+                    
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.classList.replace('bg-green-600', 'bg-purple-600');
+                        btn.classList.replace('hover:bg-green-700', 'hover:bg-purple-700');
+                        btn.disabled = false;
+                    }, 2500);
+                    return;
+                }
+            } catch (e) {
+                console.error("Failed to extract skills", e);
+            }
+            
+            // Revert state on error
+            btn.innerHTML = 'Error. Try Again.';
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }, 2000);
         }
     </script>
 </body>
