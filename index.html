@@ -9,6 +9,11 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    </script>
+
     <style>
         .accordion-content {
             transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
@@ -85,6 +90,13 @@
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                             <span class="hidden md:inline">Auto-saved</span>
                         </span>
+                        
+                        <button id="btn-ai-import" onclick="document.getElementById('ai-cv-upload').click()" class="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-sm font-medium rounded-lg transition-colors flex items-center space-x-1 shadow-sm" title="Magic Import CV (PDF/TXT)">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+                            <span class="hidden sm:inline" id="ai-import-text">Auto-Fill PDF</span>
+                        </button>
+                        <input type="file" id="ai-cv-upload" accept=".pdf,.txt" class="hidden" onchange="handleAiImport(event)">
+
                         <button id="btn-export-data" onclick="exportData()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-colors flex items-center space-x-1 shadow-sm" title="Export Backup (JSON)">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                             <span class="hidden sm:inline" id="save-text">Export</span>
@@ -95,6 +107,16 @@
                         </button>
                         <input type="file" id="file-import" accept=".json" class="hidden" onchange="importData(event)">
                     </div>
+                </div>
+
+                <!-- API Key Configuration -->
+                <div class="mb-6 p-4 bg-yellow-50/50 border border-yellow-200 rounded-xl flex flex-col space-y-2 shadow-sm">
+                    <label class="text-sm font-semibold text-yellow-800 flex items-center space-x-2">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                        <span>Gemini API Key Setup</span>
+                    </label>
+                    <input type="password" id="api-key-input" class="form-input px-3 py-2 bg-white border border-yellow-300 rounded-lg shadow-sm focus:ring-2 focus:ring-yellow-500 focus:outline-none text-sm w-full" placeholder="Enter your Gemini API key...">
+                    <p class="text-xs text-yellow-700">Required for AI features. Get a free key from <a href="https://aistudio.google.com/app/apikey" target="_blank" class="underline font-semibold hover:text-yellow-900">Google AI Studio</a>. Saved securely in your browser's local storage.</p>
                 </div>
 
                 <div class="space-y-6 pb-20">
@@ -279,7 +301,17 @@
         // Initialize from Memory if available
         const STORAGE_KEY = 'ats_resume_builder_memory';
         const savedMemory = localStorage.getItem(STORAGE_KEY);
-        let data = savedMemory ? JSON.parse(savedMemory) : JSON.parse(JSON.stringify(defaultData));
+        let data;
+        try {
+            data = savedMemory ? JSON.parse(savedMemory) : JSON.parse(JSON.stringify(defaultData));
+            // Ensure object shape exists in case of corrupted memory
+            if (!data.personal) data.personal = defaultData.personal;
+            if (!data.experience) data.experience = [];
+            if (!data.education) data.education = [];
+        } catch (e) {
+            console.warn("Corrupted local storage detected, resetting to default.");
+            data = JSON.parse(JSON.stringify(defaultData));
+        }
 
         let saveTimeout;
         function saveToMemory() {
@@ -302,6 +334,16 @@
         document.addEventListener('DOMContentLoaded', () => {
             initFormValues();
             
+            // API Key management
+            const apiKeyInput = document.getElementById('api-key-input');
+            const storedKey = localStorage.getItem('gemini_api_key');
+            if (storedKey) {
+                apiKeyInput.value = storedKey;
+            }
+            apiKeyInput.addEventListener('input', (e) => {
+                localStorage.setItem('gemini_api_key', e.target.value.trim());
+            });
+
             // Check if photo exists to show clear button on load
             const clearPhotoBtn = document.getElementById('btn-clear-photo');
             if (data.personal.photo && clearPhotoBtn) {
@@ -473,6 +515,129 @@
         }
 
         // --- Data Manipulation Functions ---
+        
+        async function handleAiImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const btn = document.getElementById('btn-ai-import');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = `<svg class="animate-spin h-4 w-4 mr-1 text-purple-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span class="hidden sm:inline">Reading...</span>`;
+            btn.disabled = true;
+
+            try {
+                let extractedText = "";
+                
+                // 1. Extract Text from PDF or TXT
+                if (file.type === "application/pdf") {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const typedarray = new Uint8Array(arrayBuffer);
+                    const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
+                    let text = "";
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        const pageText = content.items.map(item => item.str).join(" ");
+                        text += pageText + "\n";
+                    }
+                    extractedText = text;
+                } else if (file.type === "text/plain") {
+                    extractedText = await file.text();
+                } else {
+                    alert("Unsupported file type. Please upload a PDF or TXT file.");
+                    throw new Error("Unsupported format");
+                }
+
+                const apiKey = document.getElementById('api-key-input').value.trim();
+                if (!apiKey) {
+                    alert("Please enter your Gemini API Key at the top of the editor.");
+                    throw new Error("Missing API Key");
+                }
+
+                const prompt = `Act as an expert ATS resume parser. Parse the following raw CV text and return ONLY a JSON object matching this exact structure (do not include markdown formatting or intro/outro text):
+{
+  "personal": { "fullName": "", "jobTitle": "", "email": "", "phone": "", "location": "", "linkedin": "", "github": "" },
+  "summary": "",
+  "experience": [ { "title": "", "company": "", "location": "", "startDate": "", "endDate": "", "description": "use • for bullet points" } ],
+  "education": [ { "degree": "", "institution": "", "location": "", "startDate": "", "endDate": "", "gpa": "" } ],
+  "skills": "comma separated skills list"
+}
+Raw CV Text:
+${extractedText}`;
+
+                const payload = {
+                    contents: [{ parts: [{ text: prompt }] }]
+                };
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const responseText = await response.text();
+                if (!responseText) throw new Error("Empty API response");
+                
+                let result;
+                try {
+                    result = JSON.parse(responseText);
+                } catch (e) {
+                    console.error("Non-JSON API Response:", responseText);
+                    throw new Error("Invalid format returned by API.");
+                }
+                
+                if (result.error) throw new Error(result.error.message);
+                
+                if (result.candidates && result.candidates[0].content && result.candidates[0].content.parts[0].text) {
+                    let jsonStr = result.candidates[0].content.parts[0].text;
+                    
+                    // Highly robust JSON extraction (ignores conversational AI wrappers)
+                    const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+                    if (!jsonMatch) throw new Error("Could not locate valid JSON in AI response.");
+                    
+                    const parsedData = JSON.parse(jsonMatch[0]);
+
+                    // Add IDs back to array elements for UI mapping
+                    if (parsedData.experience) {
+                        parsedData.experience = parsedData.experience.map((e, i) => ({...e, id: Date.now() + i}));
+                    } else {
+                        parsedData.experience = [];
+                    }
+                    if (parsedData.education) {
+                        parsedData.education = parsedData.education.map((e, i) => ({...e, id: Date.now() + 100 + i}));
+                    } else {
+                        parsedData.education = [];
+                    }
+                    
+                    // Preserve the existing uploaded photo if there is one
+                    parsedData.personal.photo = data.personal.photo || '';
+                    
+                    // Apply to state and render
+                    data = parsedData;
+                    
+                    initFormValues();
+                    renderExperienceForms();
+                    renderEducationForms();
+                    renderPreview();
+                    
+                    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-600"><polyline points="20 6 9 17 4 12"></polyline></svg><span class="hidden sm:inline text-green-600">Success!</span>`;
+                } else {
+                    throw new Error("Invalid AI response");
+                }
+            } catch (err) {
+                console.error("AI Import Error:", err);
+                btn.innerHTML = `<span class="text-red-600 text-sm font-bold px-1">Error</span>`;
+            }
+            
+            setTimeout(() => {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+                event.target.value = ''; // Reset input so same file can be selected again
+            }, 3000);
+        }
+
         function addExperience() {
             data.experience.push({ id: Date.now(), title: '', company: '', location: '', startDate: '', endDate: '', description: '' });
             renderExperienceForms(); renderPreview();
@@ -818,9 +983,13 @@
                     tools: [{ "google_search": {} }] // Enable Google Search Grounding
                 };
                 
-                // The empty string allows the Canvas environment to dynamically provide the API key
-                const apiKey = ""; 
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+                const apiKey = document.getElementById('api-key-input').value.trim();
+                if (!apiKey) {
+                    alert("Please enter your Gemini API Key at the top of the editor.");
+                    throw new Error("Missing API Key");
+                }
+                
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
                 
                 const response = await fetch(apiUrl, {
                     method: 'POST',
@@ -828,7 +997,18 @@
                     body: JSON.stringify(payload)
                 });
                 
-                const result = await response.json();
+                const responseText = await response.text();
+                if (!responseText) throw new Error("Empty API response");
+                
+                let result;
+                try {
+                    result = JSON.parse(responseText);
+                } catch (e) {
+                    throw new Error("Invalid format returned by API.");
+                }
+                
+                if (result.error) throw new Error(result.error.message);
+                
                 const candidate = result.candidates?.[0];
                 
                 if (candidate && candidate.content?.parts?.[0]?.text) {
