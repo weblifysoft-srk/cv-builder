@@ -589,6 +589,8 @@
             if (!file) return;
 
             const btn = document.getElementById('btn-ai-import');
+            if (btn.disabled) return;
+            
             const originalHtml = btn.innerHTML;
             btn.innerHTML = `<svg class="animate-spin h-4 w-4 mr-1 text-purple-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span class="hidden sm:inline">Reading...</span>`;
             btn.disabled = true;
@@ -622,7 +624,7 @@
                     throw new Error("Missing API Key");
                 }
 
-                const prompt = `Act as an expert ATS resume parser. Parse the following raw CV text and return ONLY a JSON object matching this exact structure (do not include markdown formatting or intro/outro text):
+                const prompt = `Act as an expert ATS resume parser. Parse the following raw CV text and return ONLY a JSON object matching this exact structure:
 {
   "personal": { "fullName": "", "jobTitle": "", "email": "", "phone": "", "location": "", "linkedin": "", "github": "" },
   "summary": "",
@@ -633,11 +635,13 @@
 Raw CV Text:
 ${extractedText}`;
 
+                // Force JSON output via generationConfig
                 const payload = {
-                    contents: [{ parts: [{ text: prompt }] }]
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { responseMimeType: "application/json" }
                 };
 
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
                 const response = await fetch(apiUrl, {
                     method: 'POST',
@@ -645,27 +649,23 @@ ${extractedText}`;
                     body: JSON.stringify(payload)
                 });
 
+                if (!response.ok) throw new Error(`API returned status ${response.status}`);
+
                 const responseText = await response.text();
                 if (!responseText) throw new Error("Empty API response");
                 
-                let result;
-                try {
-                    result = JSON.parse(responseText);
-                } catch (e) {
-                    console.error("Non-JSON API Response:", responseText);
-                    throw new Error("Invalid format returned by API.");
-                }
-                
+                const result = JSON.parse(responseText);
                 if (result.error) throw new Error(result.error.message);
                 
                 if (result.candidates && result.candidates[0].content && result.candidates[0].content.parts[0].text) {
                     let jsonStr = result.candidates[0].content.parts[0].text;
                     
-                    // Highly robust JSON extraction (ignores conversational AI wrappers)
-                    const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-                    if (!jsonMatch) throw new Error("Could not locate valid JSON in AI response.");
+                    // Safe string boundary extraction (No Regex ReDoS)
+                    const startIdx = jsonStr.indexOf('{');
+                    const endIdx = jsonStr.lastIndexOf('}');
+                    if (startIdx === -1 || endIdx === -1) throw new Error("Could not locate valid JSON boundaries.");
                     
-                    const parsedData = JSON.parse(jsonMatch[0]);
+                    const parsedData = JSON.parse(jsonStr.substring(startIdx, endIdx + 1));
 
                     // Add IDs back to array elements for UI mapping
                     if (parsedData.experience) {
@@ -679,10 +679,10 @@ ${extractedText}`;
                         parsedData.education = [];
                     }
                     
-                    // Preserve the existing uploaded photo if there is one
+                    // Preserve the existing uploaded photo
+                    if (!parsedData.personal) parsedData.personal = {};
                     parsedData.personal.photo = data.personal.photo || '';
                     
-                    // Apply to state and render
                     data = parsedData;
                     
                     initFormValues();
@@ -692,7 +692,7 @@ ${extractedText}`;
                     
                     btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-600"><polyline points="20 6 9 17 4 12"></polyline></svg><span class="hidden sm:inline text-green-600">Success!</span>`;
                 } else {
-                    throw new Error("Invalid AI response");
+                    throw new Error("Invalid AI response structure");
                 }
             } catch (err) {
                 console.error("AI Import Error:", err);
@@ -702,7 +702,7 @@ ${extractedText}`;
             setTimeout(() => {
                 btn.innerHTML = originalHtml;
                 btn.disabled = false;
-                event.target.value = ''; // Reset input so same file can be selected again
+                event.target.value = '';
             }, 3000);
         }
 
@@ -730,39 +730,31 @@ ${extractedText}`;
             let saveSuccess = false;
             
             try {
-                // Try modern File System Access API first to overwrite the same file
                 if (window.showSaveFilePicker) {
                     if (!currentFileHandle) {
                         const namePart = data.personal.fullName ? data.personal.fullName.trim().replace(/\s+/g, '_') : 'Resume';
                         currentFileHandle = await window.showSaveFilePicker({
                             suggestedName: `${namePart}_Data.json`,
-                            types: [{
-                                description: 'JSON File',
-                                accept: {'application/json': ['.json']},
-                            }],
+                            types: [{ description: 'JSON File', accept: {'application/json': ['.json']} }],
                         });
                     }
-                    // Write data to the existing file handle
                     const writable = await currentFileHandle.createWritable();
                     await writable.write(dataStr);
                     await writable.close();
                     saveSuccess = true;
                 } else {
-                    // Fallback for older browsers
                     fallbackDownload(dataStr);
                     saveSuccess = true;
                 }
             } catch (err) {
-                // If the browser blocks the API (e.g., inside an iframe), trigger the fallback
                 if (err.name !== 'AbortError') {
-                    console.warn("File System API blocked by iframe security. Using fallback download.");
+                    console.warn("File System API blocked. Using fallback download.");
                     fallbackDownload(dataStr);
                     saveSuccess = true;
                 }
             }
 
             if (saveSuccess) {
-                // Show success feedback
                 btn.classList.replace('text-slate-700', 'text-green-600');
                 btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span class="hidden sm:inline">Saved!</span>`;
                 setTimeout(() => {
@@ -786,27 +778,20 @@ ${extractedText}`;
         }
 
         async function triggerLoad() {
-            // Try to capture file handle via File System Access API
             if (window.showOpenFilePicker) {
                 try {
                     const [fileHandle] = await window.showOpenFilePicker({
-                        types: [{
-                            description: 'JSON File',
-                            accept: {'application/json': ['.json']},
-                        }],
+                        types: [{ description: 'JSON File', accept: {'application/json': ['.json']} }],
                     });
                     currentFileHandle = fileHandle;
                     const file = await fileHandle.getFile();
                     processLoadedFile(file);
                 } catch (err) {
-                    // Fallback if blocked by security
                     if (err.name !== 'AbortError') {
-                        console.warn("File System API blocked by iframe security. Using fallback upload.");
                         document.getElementById('file-import').click();
                     }
                 }
             } else {
-                // Fallback to traditional hidden input
                 document.getElementById('file-import').click();
             }
         }
@@ -814,9 +799,9 @@ ${extractedText}`;
         function importData(event) {
             const file = event.target.files[0];
             if (!file) return;
-            currentFileHandle = null; // Reset handle because we used legacy input
+            currentFileHandle = null;
             processLoadedFile(file);
-            event.target.value = ''; // Reset input
+            event.target.value = '';
         }
 
         function processLoadedFile(file) {
@@ -826,23 +811,16 @@ ${extractedText}`;
                     const importedData = JSON.parse(e.target.result);
                     if (importedData && importedData.personal) {
                         data = importedData;
-                        
-                        // Update UI and re-render
                         initFormValues();
                         
-                        // Handle photograph clear button visibility
                         const clearPhotoBtn = document.getElementById('btn-clear-photo');
-                        if (data.personal.photo && clearPhotoBtn) {
-                            clearPhotoBtn.classList.remove('hidden');
-                        } else if (clearPhotoBtn) {
-                            clearPhotoBtn.classList.add('hidden');
-                        }
+                        if (data.personal.photo && clearPhotoBtn) clearPhotoBtn.classList.remove('hidden');
+                        else if (clearPhotoBtn) clearPhotoBtn.classList.add('hidden');
                         
                         renderExperienceForms();
                         renderEducationForms();
                         renderPreview();
                         
-                        // Visual feedback on the load button
                         const btn = document.getElementById('btn-import-trigger');
                         const originalHtml = btn.innerHTML;
                         btn.classList.replace('text-slate-700', 'text-green-600');
@@ -859,22 +837,12 @@ ${extractedText}`;
             reader.readAsText(file);
         }
 
-        // --- PDF Download Handling ---
         function handleDownloadPDF() {
-            // Save the original document title
             const originalTitle = document.title;
-            
-            // Construct the new filename based on Name_job_position
             const namePart = data.personal.fullName ? data.personal.fullName.trim().replace(/\s+/g, '_') : 'Name';
             const jobPart = data.personal.jobTitle ? data.personal.jobTitle.trim().replace(/\s+/g, '_') : 'job_position';
-            
-            // Temporarily set the document title so the browser uses it as the default save name
             document.title = `${namePart}_${jobPart}`;
-            
-            // Trigger the native print dialog
             window.print();
-            
-            // Restore the original document title
             document.title = originalTitle;
         }
 
@@ -1036,19 +1004,18 @@ ${extractedText}`;
             if (!jdText.trim()) return;
 
             const btn = document.getElementById('btn-extract-skills');
-            const originalText = btn.innerHTML;
+            if (btn.disabled) return;
             
-            // Show loading spinner
+            const originalText = btn.innerHTML;
             btn.innerHTML = '<svg class="animate-spin h-4 w-4 text-white mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Analyzing & Searching...';
             btn.disabled = true;
 
             try {
-                // We ask the LLM to search the internet to augment the JD skills, returning only CSV formatting.
                 const prompt = `Act as an expert ATS resume optimizer. I am applying for a job with the following description. Search the internet to find the most common and relevant industry skills for this specific role and domain, and combine them with the skills explicitly mentioned in this job description. Return ONLY a single comma-separated list of these skills (e.g., JavaScript, Agile, Project Management). Do not include any introductory text, outro, markdown formatting, or bullet points.\n\nJob Description:\n${jdText}`;
                 
                 const payload = {
                     contents: [{ parts: [{ text: prompt }] }],
-                    tools: [{ "google_search": {} }] // Enable Google Search Grounding
+                    tools: [{ "google_search": {} }]
                 };
                 
                 const apiKey = document.getElementById('api-key-input').value.trim();
@@ -1057,7 +1024,7 @@ ${extractedText}`;
                     throw new Error("Missing API Key");
                 }
                 
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
                 
                 const response = await fetch(apiUrl, {
                     method: 'POST',
@@ -1065,40 +1032,32 @@ ${extractedText}`;
                     body: JSON.stringify(payload)
                 });
                 
+                if (!response.ok) throw new Error(`API returned status ${response.status}`);
+                
                 const responseText = await response.text();
                 if (!responseText) throw new Error("Empty API response");
                 
-                let result;
-                try {
-                    result = JSON.parse(responseText);
-                } catch (e) {
-                    throw new Error("Invalid format returned by API.");
-                }
-                
+                const result = JSON.parse(responseText);
                 if (result.error) throw new Error(result.error.message);
                 
                 const candidate = result.candidates?.[0];
                 
                 if (candidate && candidate.content?.parts?.[0]?.text) {
-                    // Clean up response text
                     const extractedSkills = candidate.content.parts[0].text.trim().replace(/^\s*,|,\s*$/g, '');
                     
-                    // Smart merge with existing skills so we don't overwrite user data
                     const currentSkills = data.skills.trim();
                     if (currentSkills) {
                         const currentArr = currentSkills.split(',').map(s => s.trim()).filter(s => s);
                         const newArr = extractedSkills.split(',').map(s => s.trim()).filter(s => s);
-                        const merged = [...new Set([...currentArr, ...newArr])]; // Deduplicate
+                        const merged = [...new Set([...currentArr, ...newArr])];
                         data.skills = merged.join(', ');
                     } else {
                         data.skills = extractedSkills;
                     }
                     
-                    // Update UI State
                     document.getElementById('f-skills').value = data.skills;
                     renderPreview();
                     
-                    // Show a brief success state
                     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><polyline points="20 6 9 17 4 12"></polyline></svg> Added Successfully!';
                     btn.classList.replace('bg-purple-600', 'bg-green-600');
                     btn.classList.replace('hover:bg-purple-700', 'hover:bg-green-700');
@@ -1115,12 +1074,11 @@ ${extractedText}`;
                 console.error("Failed to extract skills", e);
             }
             
-            // Revert state on error
             btn.innerHTML = 'Error. Try Again.';
             setTimeout(() => {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
-            }, 2000);
+            }, 3000);
         }
 
         async function proofreadCV() {
@@ -1131,9 +1089,9 @@ ${extractedText}`;
             }
 
             const btn = document.getElementById('btn-proofread');
-            const originalHtml = btn.innerHTML;
+            if (btn.disabled) return; // Prevent concurrent requests breaking the button UI
             
-            // Show loading spinner
+            const originalHtml = btn.innerHTML;
             btn.innerHTML = `<svg class="animate-spin h-4 w-4 mr-1 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span class="hidden sm:inline text-blue-700">Checking...</span>`;
             btn.disabled = true;
 
@@ -1145,13 +1103,18 @@ Task:
 3. Ensure bullet points use strong action verbs.
 4. DO NOT change any personal details, dates, or factual information. DO NOT change the JSON keys.
 
-Return ONLY a valid JSON object matching the exact structure provided below. Do not include markdown formatting, intro, or outro text.
+Return ONLY a valid JSON object matching the exact structure provided below. Do not include intro or outro text.
 
 Resume JSON:
 ${JSON.stringify(data)}`;
 
-                const payload = { contents: [{ parts: [{ text: prompt }] }] };
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+                // Force JSON output via generationConfig
+                const payload = { 
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { responseMimeType: "application/json" }
+                };
+                
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
                 const response = await fetch(apiUrl, {
                     method: 'POST',
@@ -1159,38 +1122,41 @@ ${JSON.stringify(data)}`;
                     body: JSON.stringify(payload)
                 });
 
+                if (!response.ok) throw new Error(`API returned status ${response.status}`);
+
                 const responseText = await response.text();
                 if (!responseText) throw new Error("Empty API response");
                 
-                let result;
-                try {
-                    result = JSON.parse(responseText);
-                } catch (e) {
-                    throw new Error("Invalid format returned by API.");
-                }
-                
+                const result = JSON.parse(responseText);
                 if (result.error) throw new Error(result.error.message);
                 
                 if (result.candidates && result.candidates[0].content && result.candidates[0].content.parts[0].text) {
                     let jsonStr = result.candidates[0].content.parts[0].text;
-                    const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-                    if (!jsonMatch) throw new Error("Could not locate valid JSON in AI response.");
                     
-                    const parsedData = JSON.parse(jsonMatch[0]);
+                    // Safe string boundary extraction (No Regex ReDoS)
+                    const startIdx = jsonStr.indexOf('{');
+                    const endIdx = jsonStr.lastIndexOf('}');
+                    if (startIdx === -1 || endIdx === -1) throw new Error("Could not locate valid JSON boundaries.");
                     
-                    // Trigger the UI comparison diff logic instead of immediately applying
+                    const parsedData = JSON.parse(jsonStr.substring(startIdx, endIdx + 1));
+                    
+                    // Protective fallback defaults to prevent TypeError UI crashes
+                    if (!parsedData.personal) parsedData.personal = {};
+                    if (!parsedData.experience) parsedData.experience = [];
+                    if (!parsedData.education) parsedData.education = [];
+
                     generateProofreadDiffs(parsedData);
 
-                    // Reset original loading button state
                     btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-600"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span class="hidden sm:inline text-green-600">Done!</span>`;
                 } else {
-                    throw new Error("Invalid AI response");
+                    throw new Error("Invalid AI response structure");
                 }
             } catch (err) {
                 console.error("Proofread Error:", err);
-                btn.innerHTML = `<span class="text-red-600 text-sm font-bold px-1">Error</span>`;
+                btn.innerHTML = `<span class="text-red-600 text-sm font-bold px-1">Error: Try Again</span>`;
             }
 
+            // Always execute reset inside the final stack path
             setTimeout(() => {
                 btn.innerHTML = originalHtml;
                 btn.disabled = false;
