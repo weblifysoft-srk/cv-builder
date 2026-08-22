@@ -34,12 +34,29 @@
         
         /* Print styles for generating PDF */
         @media print {
-            body, html { width: 100%; height: 100%; margin: 0; padding: 0; background: white; }
+            body, html { 
+                width: 100%; 
+                height: auto !important; 
+                overflow: visible !important; 
+                margin: 0; 
+                padding: 0; 
+                background: white; 
+            }
             @page { margin: 0; size: letter; }
+            
+            /* Un-restrict flex and overflow boundaries to allow multi-page pagination */
+            main { display: block !important; height: auto !important; overflow: visible !important; }
+            #panel-preview { display: block !important; height: auto !important; overflow: visible !important; padding: 0 !important; }
+            
             .print-hidden { display: none !important; }
             .print-block { display: block !important; width: 100% !important; max-width: none !important; }
-            .print-no-shadow { box-shadow: none !important; }
-            .print-p-8 { padding: 2rem !important; }
+            .print-no-shadow { box-shadow: none !important; border: none !important; }
+            
+            /* Ensure the document has proper margins natively on printed pages */
+            #resume-document { 
+                padding: 15mm 20mm !important; 
+                min-height: auto !important;
+            }
         }
     </style>
 </head>
