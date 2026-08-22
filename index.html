@@ -42,7 +42,8 @@
                 padding: 0; 
                 background: white; 
             }
-            @page { margin: 0; size: letter; }
+            /* Apply uniform 0.75-inch margins to every printed page for ATS compliance and clean layout */
+            @page { margin: 0.75in; size: letter; }
             
             /* Un-restrict flex and overflow boundaries to allow multi-page pagination */
             main { display: block !important; height: auto !important; overflow: visible !important; }
@@ -52,9 +53,9 @@
             .print-block { display: block !important; width: 100% !important; max-width: none !important; }
             .print-no-shadow { box-shadow: none !important; border: none !important; }
             
-            /* Ensure the document has proper margins natively on printed pages */
+            /* Remove manual padding and let the @page margin handle spacing uniformly on all pages */
             #resume-document { 
-                padding: 15mm 20mm !important; 
+                padding: 0 !important; 
                 min-height: auto !important;
             }
         }
