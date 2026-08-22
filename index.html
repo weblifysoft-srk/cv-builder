@@ -63,6 +63,37 @@
 </head>
 <body class="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-800">
 
+    <!-- Proofread Modal -->
+    <div id="proofread-modal" class="fixed inset-0 bg-slate-900/80 hidden z-[110] flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                <h3 class="text-lg font-bold text-slate-800 tracking-tight flex items-center gap-2">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-600"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path><path d="m9 12 2 2 4-4"></path></svg>
+                    Review AI Suggestions
+                </h3>
+                <button onclick="closeProofreadModal()" class="text-slate-400 hover:text-red-500 transition-colors focus:outline-none">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+            <div class="p-4 overflow-y-auto flex-1 bg-slate-100 space-y-4" id="proofread-diffs-container">
+                <!-- Dynamic diffs injected here -->
+            </div>
+            <div class="p-4 border-t border-slate-200 flex justify-between items-center bg-white shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                <label class="flex items-center space-x-2 text-sm font-medium text-slate-700 cursor-pointer">
+                    <input type="checkbox" id="proofread-select-all" class="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 transition-colors" checked onchange="toggleAllProofread(this.checked)">
+                    <span>Select All</span>
+                </label>
+                <div class="flex space-x-3">
+                    <button onclick="closeProofreadModal()" class="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-sm">Cancel</button>
+                    <button onclick="applySelectedProofread()" class="px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center space-x-2">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"></path></svg>
+                        <span>Apply Selected Fixes</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="crop-modal" class="fixed inset-0 bg-slate-900/80 hidden z-[100] flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
             <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
@@ -1147,31 +1178,11 @@ ${JSON.stringify(data)}`;
                     
                     const parsedData = JSON.parse(jsonMatch[0]);
                     
-                    // Preserve the Photo and IDs so the UI doesn't break or reset images
-                    parsedData.personal.photo = data.personal.photo;
-                    
-                    if (parsedData.experience && data.experience) {
-                        parsedData.experience = parsedData.experience.map((exp, i) => ({
-                            ...exp, id: data.experience[i] ? data.experience[i].id : Date.now() + i
-                        }));
-                    }
-                    if (parsedData.education && data.education) {
-                        parsedData.education = parsedData.education.map((edu, i) => ({
-                            ...edu, id: data.education[i] ? data.education[i].id : Date.now() + 100 + i
-                        }));
-                    }
+                    // Trigger the UI comparison diff logic instead of immediately applying
+                    generateProofreadDiffs(parsedData);
 
-                    // Apply updated data
-                    data = parsedData;
-                    
-                    // Refresh all forms and the live preview
-                    initFormValues();
-                    renderExperienceForms();
-                    renderEducationForms();
-                    renderPreview();
-
-                    // Show success
-                    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-600"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span class="hidden sm:inline text-green-600">Fixed!</span>`;
+                    // Reset original loading button state
+                    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-600"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span class="hidden sm:inline text-green-600">Done!</span>`;
                 } else {
                     throw new Error("Invalid AI response");
                 }
@@ -1184,6 +1195,122 @@ ${JSON.stringify(data)}`;
                 btn.innerHTML = originalHtml;
                 btn.disabled = false;
             }, 3000);
+        }
+
+        // --- Proofread Diff & Modal Logic ---
+        let currentProofreadDiffs = [];
+
+        function generateProofreadDiffs(parsedData) {
+            currentProofreadDiffs = [];
+            
+            // Helper to strip purely invisible whitespace changes
+            const cleanStr = (s) => (s || '').toString().trim().replace(/\r\n/g, '\n');
+            const compare = (oldVal, newVal, label, applyFn) => {
+                if (cleanStr(oldVal) !== cleanStr(newVal)) {
+                    currentProofreadDiffs.push({ label, original: oldVal || '', suggested: newVal || '', apply: applyFn });
+                }
+            };
+
+            compare(data.summary, parsedData.summary, "Professional Summary", (val) => data.summary = val);
+            compare(data.skills, parsedData.skills, "Skills", (val) => data.skills = val);
+
+            // Compare Personal Info
+            ['fullName', 'jobTitle', 'email', 'phone', 'location', 'linkedin', 'github'].forEach(field => {
+                compare(data.personal[field], parsedData.personal[field], `Personal Info: ${field}`, (val) => data.personal[field] = val);
+            });
+
+            // Compare Experience blocks (mapped by index to avoid missing IDs)
+            data.experience.forEach((exp, i) => {
+                const newExp = parsedData.experience[i]; 
+                if (newExp) {
+                    ['title', 'company', 'location', 'description'].forEach(field => {
+                        compare(exp[field], newExp[field], `Experience (${exp.company || 'Role'}): ${field}`, (val) => {
+                            let target = data.experience.find(e => e.id === exp.id);
+                            if(target) target[field] = val;
+                        });
+                    });
+                }
+            });
+
+            // Compare Education blocks
+            data.education.forEach((edu, i) => {
+                const newEdu = parsedData.education[i];
+                if (newEdu) {
+                    ['degree', 'institution', 'location', 'gpa'].forEach(field => {
+                        compare(edu[field], newEdu[field], `Education (${edu.institution || 'School'}): ${field}`, (val) => {
+                            let target = data.education.find(e => e.id === edu.id);
+                            if(target) target[field] = val;
+                        });
+                    });
+                }
+            });
+
+            if (currentProofreadDiffs.length === 0) {
+                alert("AI didn't find any grammar or spelling issues. Your CV looks perfect!");
+                return;
+            }
+
+            renderProofreadModal();
+        }
+
+        function renderProofreadModal() {
+            const container = document.getElementById('proofread-diffs-container');
+            document.getElementById('proofread-select-all').checked = true;
+            
+            container.innerHTML = currentProofreadDiffs.map((diff, index) => `
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex space-x-4 items-start transition-colors hover:border-blue-300">
+                    <div class="pt-1 shrink-0">
+                        <input type="checkbox" class="diff-checkbox rounded text-blue-600 focus:ring-blue-500 w-5 h-5 cursor-pointer" data-index="${index}" checked>
+                    </div>
+                    <div class="flex-1 overflow-hidden">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">${escapeHtml(diff.label)}</h4>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div class="bg-red-50/50 p-3 rounded-lg border border-red-100/50 relative">
+                                <span class="absolute -top-2.5 left-3 bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide shadow-sm">Original</span>
+                                <div class="text-sm text-slate-700 whitespace-pre-wrap break-words mt-1 line-through decoration-red-300/70">${escapeHtml(diff.original)}</div>
+                            </div>
+                            <div class="bg-green-50/50 p-3 rounded-lg border border-green-100/50 relative">
+                                <span class="absolute -top-2.5 left-3 bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide shadow-sm">Suggested</span>
+                                <div class="text-sm text-slate-800 whitespace-pre-wrap break-words mt-1">${escapeHtml(diff.suggested)}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('proofread-modal').classList.remove('hidden');
+        }
+
+        function toggleAllProofread(isChecked) {
+            document.querySelectorAll('.diff-checkbox').forEach(cb => cb.checked = isChecked);
+        }
+
+        function closeProofreadModal() {
+            document.getElementById('proofread-modal').classList.add('hidden');
+        }
+
+        function applySelectedProofread() {
+            const checkboxes = document.querySelectorAll('.diff-checkbox:checked');
+            let appliedCount = 0;
+            
+            checkboxes.forEach(cb => {
+                const idx = parseInt(cb.getAttribute('data-index'));
+                const diff = currentProofreadDiffs[idx];
+                if(diff) {
+                    diff.apply(diff.suggested);
+                    appliedCount++;
+                }
+            });
+
+            if (appliedCount > 0) {
+                // Instantly sync the approved changes back to the text inputs & preview
+                initFormValues();
+                renderExperienceForms();
+                renderEducationForms();
+                renderPreview();
+            }
+            
+            closeProofreadModal();
         }
     </script>
 </body>
