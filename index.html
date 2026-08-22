@@ -1089,26 +1089,25 @@ ${extractedText}`;
             }
 
             const btn = document.getElementById('btn-proofread');
-            if (btn.disabled) return; // Prevent concurrent requests breaking the button UI
+            if (btn.disabled) return; 
             
             const originalHtml = btn.innerHTML;
             btn.innerHTML = `<svg class="animate-spin h-4 w-4 mr-1 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span class="hidden sm:inline text-blue-700">Checking...</span>`;
             btn.disabled = true;
 
             try {
-                const prompt = `Act as an expert copywriter and ATS resume optimizer. Review the following JSON resume data.
-Task:
-1. Fix all spelling errors and grammatical mistakes.
-2. Improve the sentence structure and professional tone of the summary and experience descriptions.
-3. Ensure bullet points use strong action verbs.
-4. DO NOT change any personal details, dates, or factual information. DO NOT change the JSON keys.
+                const prompt = `You are an expert copywriter and ATS resume optimizer. Review the following JSON resume data.
+1. Fix all spelling and grammatical errors.
+2. Improve sentence structure and professional tone.
+3. Ensure bullet points start with strong action verbs.
+4. DO NOT change personal details, contact info, dates, or factual information. 
+5. DO NOT change the JSON keys.
 
-Return ONLY a valid JSON object matching the exact structure provided below. Do not include intro or outro text.
+Return ONLY a valid JSON object matching the exact structure below.
 
 Resume JSON:
 ${JSON.stringify(data)}`;
 
-                // Force JSON output via generationConfig
                 const payload = { 
                     contents: [{ parts: [{ text: prompt }] }],
                     generationConfig: { responseMimeType: "application/json" }
@@ -1122,25 +1121,33 @@ ${JSON.stringify(data)}`;
                     body: JSON.stringify(payload)
                 });
 
-                if (!response.ok) throw new Error(`API returned status ${response.status}`);
+                if (!response.ok) {
+                    const errText = await response.text();
+                    let errMsg = `HTTP ${response.status}`;
+                    try { errMsg = JSON.parse(errText).error.message; } catch(e) {}
+                    throw new Error(errMsg);
+                }
 
                 const responseText = await response.text();
-                if (!responseText) throw new Error("Empty API response");
-                
                 const result = JSON.parse(responseText);
+                
                 if (result.error) throw new Error(result.error.message);
                 
                 if (result.candidates && result.candidates[0].content && result.candidates[0].content.parts[0].text) {
                     let jsonStr = result.candidates[0].content.parts[0].text;
+                    let parsedData;
                     
-                    // Safe string boundary extraction (No Regex ReDoS)
-                    const startIdx = jsonStr.indexOf('{');
-                    const endIdx = jsonStr.lastIndexOf('}');
-                    if (startIdx === -1 || endIdx === -1) throw new Error("Could not locate valid JSON boundaries.");
+                    try {
+                        // First try parsing directly (responseMimeType usually guarantees clean JSON)
+                        parsedData = JSON.parse(jsonStr);
+                    } catch (e) {
+                        // Fallback: extract from boundaries if model hallucinates markdown
+                        const startIdx = jsonStr.indexOf('{');
+                        const endIdx = jsonStr.lastIndexOf('}');
+                        if (startIdx === -1 || endIdx === -1) throw new Error("Could not locate valid JSON boundaries.");
+                        parsedData = JSON.parse(jsonStr.substring(startIdx, endIdx + 1));
+                    }
                     
-                    const parsedData = JSON.parse(jsonStr.substring(startIdx, endIdx + 1));
-                    
-                    // Protective fallback defaults to prevent TypeError UI crashes
                     if (!parsedData.personal) parsedData.personal = {};
                     if (!parsedData.experience) parsedData.experience = [];
                     if (!parsedData.education) parsedData.education = [];
@@ -1154,9 +1161,9 @@ ${JSON.stringify(data)}`;
             } catch (err) {
                 console.error("Proofread Error:", err);
                 btn.innerHTML = `<span class="text-red-600 text-sm font-bold px-1">Error: Try Again</span>`;
+                alert("Proofread failed: " + err.message);
             }
 
-            // Always execute reset inside the final stack path
             setTimeout(() => {
                 btn.innerHTML = originalHtml;
                 btn.disabled = false;
