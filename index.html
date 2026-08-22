@@ -42,8 +42,8 @@
                 padding: 0; 
                 background: white; 
             }
-            /* Apply uniform 0.75-inch margins to every printed page for ATS compliance and clean layout */
-            @page { margin: 0.75in; size: letter; }
+            /* Set top/bottom margin to 0 to hide browser headers (Date/URL), keep left/right 0.75in */
+            @page { margin: 0 0.75in; size: letter; }
             
             /* Un-restrict flex and overflow boundaries to allow multi-page pagination */
             main { display: block !important; height: auto !important; overflow: visible !important; }
@@ -53,11 +53,11 @@
             .print-block { display: block !important; width: 100% !important; max-width: none !important; }
             .print-no-shadow { box-shadow: none !important; border: none !important; }
             
-            /* Remove manual padding and let the @page margin handle spacing uniformly on all pages */
-            #resume-document { 
-                padding: 0 !important; 
-                min-height: auto !important;
-            }
+            /* CSS table trick to simulate top/bottom margins without triggering browser text */
+            .print-table-header-group { display: table-header-group !important; }
+            .print-table-footer-group { display: table-footer-group !important; }
+            .print-p-0 { padding: 0 !important; }
+            .print-container { min-height: auto !important; }
         }
     </style>
 </head>
@@ -289,8 +289,22 @@
                 </div>
 
                 <!-- ACTUAL RESUME DOCUMENT -->
-                <div id="resume-document" class="bg-white shadow-2xl print-no-shadow w-full min-h-[1056px] text-black p-10 sm:p-12 print-p-8" style="font-family: Georgia, 'Times New Roman', serif;">
-                    <!-- Content injected via JS -->
+                <div class="bg-white shadow-2xl print-no-shadow w-full min-h-[1056px] text-black p-10 sm:p-12 print-p-0 print-container" style="font-family: Georgia, 'Times New Roman', serif;">
+                    <table class="w-full border-collapse border-0">
+                        <thead class="hidden print-table-header-group">
+                            <tr><td class="p-0 border-0"><div style="height: 0.75in;"></div></td></tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td id="resume-document" class="p-0 border-0 align-top">
+                                    <!-- Content injected via JS -->
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tfoot class="hidden print-table-footer-group">
+                            <tr><td class="p-0 border-0"><div style="height: 0.75in;"></div></td></tr>
+                        </tfoot>
+                    </table>
                 </div>
             </div>
         </section>
