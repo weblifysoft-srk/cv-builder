@@ -632,6 +632,9 @@
   "education": [ { "degree": "", "institution": "", "location": "", "startDate": "", "endDate": "", "gpa": "" } ],
   "skills": "comma separated skills list"
 }
+
+IMPORTANT: Return ONLY a valid JSON object. No markdown formatting, no conversational text, and no explanations.
+
 Raw CV Text:
 ${extractedText}`;
 
@@ -656,16 +659,24 @@ ${extractedText}`;
                 
                 const result = JSON.parse(responseText);
                 if (result.error) throw new Error(result.error.message);
+                if (!result.candidates || result.candidates.length === 0 || !result.candidates[0].content) {
+                    throw new Error("AI returned an empty response or blocked the request for safety reasons.");
+                }
                 
-                if (result.candidates && result.candidates[0].content && result.candidates[0].content.parts[0].text) {
+                if (result.candidates[0].content && result.candidates[0].content.parts[0].text) {
                     let jsonStr = result.candidates[0].content.parts[0].text;
+                    let parsedData;
                     
-                    // Safe string boundary extraction (No Regex ReDoS)
-                    const startIdx = jsonStr.indexOf('{');
-                    const endIdx = jsonStr.lastIndexOf('}');
-                    if (startIdx === -1 || endIdx === -1) throw new Error("Could not locate valid JSON boundaries.");
-                    
-                    const parsedData = JSON.parse(jsonStr.substring(startIdx, endIdx + 1));
+                    try {
+                        const cleanStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+                        parsedData = JSON.parse(cleanStr);
+                    } catch (e) {
+                        // Fallback boundary extraction
+                        const startIdx = jsonStr.indexOf('{');
+                        const endIdx = jsonStr.lastIndexOf('}');
+                        if (startIdx === -1 || endIdx === -1) throw new Error("AI failed to output a JSON object.");
+                        parsedData = JSON.parse(jsonStr.substring(startIdx, endIdx + 1));
+                    }
 
                     // Add IDs back to array elements for UI mapping
                     if (parsedData.experience) {
@@ -1102,8 +1113,9 @@ ${extractedText}`;
 3. Ensure bullet points start with strong action verbs.
 4. DO NOT change personal details, contact info, dates, or factual information. 
 5. DO NOT change the JSON keys.
+6. YOU MUST return the entire JSON object, even if no changes are made.
 
-Return ONLY a valid JSON object matching the exact structure below.
+Return ONLY a valid JSON object matching the exact structure below. Do not add markdown formatting, conversational text, or explanations.
 
 Resume JSON:
 ${JSON.stringify(data)}`;
@@ -1132,20 +1144,33 @@ ${JSON.stringify(data)}`;
                 const result = JSON.parse(responseText);
                 
                 if (result.error) throw new Error(result.error.message);
+                if (!result.candidates || result.candidates.length === 0 || !result.candidates[0].content) {
+                    throw new Error("AI returned an empty response or blocked the request for safety reasons.");
+                }
                 
-                if (result.candidates && result.candidates[0].content && result.candidates[0].content.parts[0].text) {
+                if (result.candidates[0].content && result.candidates[0].content.parts[0].text) {
                     let jsonStr = result.candidates[0].content.parts[0].text;
                     let parsedData;
                     
                     try {
-                        // First try parsing directly (responseMimeType usually guarantees clean JSON)
-                        parsedData = JSON.parse(jsonStr);
+                        // First try parsing directly, stripping any accidental markdown the AI adds
+                        const cleanStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+                        parsedData = JSON.parse(cleanStr);
                     } catch (e) {
-                        // Fallback: extract from boundaries if model hallucinates markdown
+                        // Fallback: extract from boundaries if model hallucinates markdown or text
                         const startIdx = jsonStr.indexOf('{');
                         const endIdx = jsonStr.lastIndexOf('}');
-                        if (startIdx === -1 || endIdx === -1) throw new Error("Could not locate valid JSON boundaries.");
-                        parsedData = JSON.parse(jsonStr.substring(startIdx, endIdx + 1));
+                        if (startIdx === -1 || endIdx === -1) {
+                            console.error("Raw AI Response:", jsonStr);
+                            throw new Error("AI failed to output a JSON object. Check console for details.");
+                        }
+                        
+                        try {
+                            parsedData = JSON.parse(jsonStr.substring(startIdx, endIdx + 1));
+                        } catch (parseErr) {
+                            console.error("JSON Parsing Error:", parseErr, "Raw String:", jsonStr.substring(startIdx, endIdx + 1));
+                            throw new Error("AI returned malformed JSON syntax.");
+                        }
                     }
                     
                     if (!parsedData.personal) parsedData.personal = {};
