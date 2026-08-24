@@ -28,7 +28,7 @@
         .chevron { transition: transform 0.3s ease; }
         .chevron.open { transform: rotate(180deg); }
         
-        /* Layout overrides for printing */
+        /* Print styles for generating PDF */
         @media print {
             body, html { 
                 width: 100%; 
@@ -36,20 +36,17 @@
                 margin: 0; 
                 padding: 0; 
                 background: white; 
-                overflow: visible !important;
+                overflow: visible !important; 
             }
-            /* Sets exact 0.75 inch margins on every printed page */
-            @page { margin: 0.75in; } 
-            
-        /* Print styles for generating PDF */
-        @media print {
-            body, html { width: 100%; height: auto !important; margin: 0; padding: 0; background: white; overflow: visible !important; }
-            @page { margin: 0; size: letter; }
+            @page { 
+                margin: 0; 
+                size: letter; 
+            }
             .print-hidden { display: none !important; }
             .print-block { display: block !important; width: 100% !important; max-width: none !important; }
             .print-no-shadow { box-shadow: none !important; border: none !important; }
-            .print-p-0 { padding: 0 !important; }
-            thead, tfoot { display: table-row-group; }
+            .print-header { display: table-header-group !important; }
+            .print-footer { display: table-footer-group !important; }
         }
     </style>
 </head>
@@ -267,21 +264,21 @@
                 </div>
 
                 <!-- ACTUAL RESUME DOCUMENT -->
-                <div class="bg-white shadow-2xl print-no-shadow w-full min-h-[1056px] text-black print-p-0" style="font-family: Georgia, 'Times New Roman', serif;">
+                <div class="bg-white shadow-2xl print-no-shadow w-full min-h-[1056px] text-black print:p-0" style="font-family: Georgia, 'Times New Roman', serif;">
                     
                     <!-- Print Table Hack: Forces uniform margins on every printed page while hiding browser headers/footers -->
                     <table class="w-full border-collapse border-0">
-                        <thead class="print-hidden"><tr><td style="height: 0.75in;"></td></tr></thead>
+                        <thead class="hidden print-header"><tr><td style="height: 0.75in;"></td></tr></thead>
                         <tbody>
                             <tr>
-                                <td class="p-10 sm:p-12 print-p-0 align-top">
+                                <td class="p-10 sm:p-12 print:px-[0.75in] print:py-0 align-top">
                                     <div id="resume-document">
                                         <!-- Content injected via JS -->
                                     </div>
                                 </td>
                             </tr>
                         </tbody>
-                        <tfoot class="print-hidden"><tr><td style="height: 0.75in;"></td></tr></tfoot>
+                        <tfoot class="hidden print-footer"><tr><td style="height: 0.75in;"></td></tr></tfoot>
                     </table>
                 </div>
             </div>
