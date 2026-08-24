@@ -6,15 +6,15 @@
     <title>ATS Resume Builder</title>
     <script src="https://cdn.tailwindcss.com"></script>
     
+    <!-- Cropper.js for Photo Cropping -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
-
+    
+    <!-- PDF.js for AI Import -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-    <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-    </script>
-
+    
     <style>
+        /* Accordion Animations */
         .accordion-content {
             transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
             max-height: 0;
@@ -22,103 +22,59 @@
             overflow: hidden;
         }
         .accordion-content.open {
-            max-height: 3000px; 
+            max-height: 5000px;
             opacity: 1;
         }
-        .chevron {
-            transition: transform 0.3s ease;
-        }
-        .chevron.open {
-            transform: rotate(180deg);
-        }
+        .chevron { transition: transform 0.3s ease; }
+        .chevron.open { transform: rotate(180deg); }
         
-        /* Print styles for generating PDF */
+        /* Layout overrides for printing */
         @media print {
             body, html { 
                 width: 100%; 
                 height: auto !important; 
-                overflow: visible !important; 
                 margin: 0; 
                 padding: 0; 
                 background: white; 
+                overflow: visible !important;
             }
-            /* Set top/bottom margin to 0 to hide browser headers (Date/URL), keep left/right 0.75in */
-            @page { margin: 0 0.75in; size: letter; }
-            
-            /* Un-restrict flex and overflow boundaries to allow multi-page pagination */
-            main { display: block !important; height: auto !important; overflow: visible !important; }
-            #panel-preview { display: block !important; height: auto !important; overflow: visible !important; padding: 0 !important; }
+            /* Sets exact 0.75 inch margins on every printed page */
+            @page { margin: 0.75in; } 
             
             .print-hidden { display: none !important; }
             .print-block { display: block !important; width: 100% !important; max-width: none !important; }
             .print-no-shadow { box-shadow: none !important; border: none !important; }
-            
-            /* CSS table trick to simulate top/bottom margins without triggering browser text */
-            .print-table-header-group { display: table-header-group !important; }
-            .print-table-footer-group { display: table-footer-group !important; }
             .print-p-0 { padding: 0 !important; }
-            .print-container { min-height: auto !important; }
+            
+            /* Hide the table headers/footers used for spacing */
+            thead, tfoot { display: table-row-group; }
+            /* Hide empty space elements in print */
+            .print-spacing-hack { display: none; }
         }
     </style>
 </head>
-<body class="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-800">
+<body class="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-800 h-screen overflow-hidden">
 
-    <!-- Proofread Modal -->
-    <div id="proofread-modal" class="fixed inset-0 bg-slate-900/80 hidden z-[110] flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                <h3 class="text-lg font-bold text-slate-800 tracking-tight flex items-center gap-2">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-600"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path><path d="m9 12 2 2 4-4"></path></svg>
-                    Review AI Suggestions
-                </h3>
-                <button onclick="closeProofreadModal()" class="text-slate-400 hover:text-red-500 transition-colors focus:outline-none">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                </button>
-            </div>
-            <div class="p-4 overflow-y-auto flex-1 bg-slate-100 space-y-4" id="proofread-diffs-container">
-                <!-- Dynamic diffs injected here -->
-            </div>
-            <div class="p-4 border-t border-slate-200 flex justify-between items-center bg-white shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-                <label class="flex items-center space-x-2 text-sm font-medium text-slate-700 cursor-pointer">
-                    <input type="checkbox" id="proofread-select-all" class="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 transition-colors" checked onchange="toggleAllProofread(this.checked)">
-                    <span>Select All</span>
-                </label>
-                <div class="flex space-x-3">
-                    <button onclick="closeProofreadModal()" class="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-sm">Cancel</button>
-                    <button onclick="applySelectedProofread()" class="px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center space-x-2">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"></path></svg>
-                        <span>Apply Selected Fixes</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
+    <!-- Image Cropping Modal -->
     <div id="crop-modal" class="fixed inset-0 bg-slate-900/80 hidden z-[100] flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                <h3 class="text-lg font-bold text-slate-800 tracking-tight">Crop Photo</h3>
-                <button id="btn-close-modal" class="text-slate-400 hover:text-red-500 transition-colors focus:outline-none">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <h3 class="text-lg font-bold text-slate-800">Crop Profile Photo</h3>
+                <button onclick="closeCropModal()" class="text-slate-400 hover:text-slate-700 transition-colors">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
             </div>
-            <div class="p-4 bg-slate-800 flex justify-center items-center w-full" style="height: 50vh; min-height: 300px;">
-                <div class="w-full h-full relative">
-                    <img id="image-to-crop" src="" alt="To Crop" class="max-w-full max-h-full block hidden">
-                </div>
+            <div class="p-4 flex-1 overflow-hidden bg-black flex justify-center items-center min-h-[300px]">
+                <img id="crop-image" src="" class="max-w-full max-h-full block">
             </div>
-            <div class="p-4 border-t border-slate-200 flex justify-end space-x-3 bg-slate-50">
-                <button id="btn-cancel-crop" class="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors shadow-sm">Cancel</button>
-                <button id="btn-apply-crop" class="px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center space-x-2">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"></path><path d="M18 22V8a2 2 0 0 0-2-2H2"></path></svg>
-                    <span>Crop & Save</span>
-                </button>
+            <div class="p-4 border-t border-slate-200 bg-slate-50 flex justify-end space-x-3">
+                <button onclick="closeCropModal()" class="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg transition-colors">Cancel</button>
+                <button onclick="applyCrop()" class="px-6 py-2 bg-blue-600 text-white font-medium hover:bg-blue-700 rounded-lg shadow-md transition-colors">Crop & Save</button>
             </div>
         </div>
     </div>
 
-    <!-- Mobile Header / Tabs -->
-    <header class="bg-white shadow-sm print-hidden lg:hidden flex justify-between items-center p-4 sticky top-0 z-50">
+    <header class="bg-white shadow-sm print-hidden lg:hidden flex justify-between items-center p-4 z-10 shrink-0">
         <h1 class="text-xl font-bold text-slate-800 tracking-tight">ATS Builder</h1>
         <div class="flex space-x-2">
             <button id="tab-edit" onclick="switchTab('edit')" class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-blue-600 text-white">Edit</button>
@@ -126,84 +82,72 @@
         </div>
     </header>
 
-    <!-- Main Content -->
     <main class="flex-1 flex overflow-hidden flex-col lg:flex-row relative">
         
         <!-- LEFT PANEL: Form Editor -->
-        <section id="panel-edit" class="w-full lg:w-[45%] xl:w-[40%] bg-white border-r border-slate-200 overflow-y-auto print-hidden block lg:block">
-            <div class="p-6">
-                <div class="flex justify-between items-center mb-8">
-                    <h1 class="text-2xl font-bold tracking-tight text-slate-800">Resume Data</h1>
-                    <div class="flex items-center space-x-2">
-                        <span id="auto-save-indicator" class="text-xs text-green-600 font-medium mr-1 opacity-0 transition-opacity flex items-center space-x-1">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                            <span class="hidden md:inline">Auto-saved</span>
-                        </span>
+        <section id="panel-edit" class="w-full lg:w-[45%] xl:w-[40%] bg-white border-r border-slate-200 overflow-y-auto print-hidden block lg:block relative z-0 h-full pb-20 lg:pb-0">
+            <div class="p-5 sm:p-6">
+                <!-- Editor Header -->
+                <div class="flex flex-col space-y-4 mb-6">
+                    <div class="flex justify-between items-center">
+                        <h1 class="text-2xl font-bold tracking-tight">Resume Data</h1>
                         
-                        <button id="btn-ai-import" onclick="document.getElementById('ai-cv-upload').click()" class="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-sm font-medium rounded-lg transition-colors flex items-center space-x-1 shadow-sm" title="Magic Import CV (PDF/TXT)">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-                            <span class="hidden sm:inline" id="ai-import-text">Auto-Fill PDF</span>
-                        </button>
-                        <input type="file" id="ai-cv-upload" accept=".pdf,.txt" class="hidden" onchange="handleAiImport(event)">
-
-                        <button id="btn-proofread" onclick="proofreadCV()" class="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-sm font-medium rounded-lg transition-colors flex items-center space-x-1 shadow-sm" title="AI Grammar & Spell Check">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"></path><path d="m9 12 2 2 4-4"></path></svg>
-                            <span class="hidden sm:inline">Proofread</span>
-                        </button>
-
-                        <button id="btn-export-data" onclick="exportData()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-colors flex items-center space-x-1 shadow-sm" title="Export Backup (JSON)">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                            <span class="hidden sm:inline" id="save-text">Export</span>
-                        </button>
-                        <button id="btn-import-trigger" onclick="triggerLoad()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-colors flex items-center space-x-1 shadow-sm" title="Import Backup (JSON)">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                            <span class="hidden sm:inline">Import</span>
-                        </button>
-                        <input type="file" id="file-import" accept=".json" class="hidden" onchange="importData(event)">
+                        <!-- Data Actions -->
+                        <div class="flex space-x-2">
+                            <button onclick="exportData()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-colors flex items-center space-x-1 shadow-sm" title="Download Backup (JSON)">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            </button>
+                            <label class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-colors flex items-center space-x-1 shadow-sm cursor-pointer" title="Load Backup (JSON)">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                <input type="file" accept=".json" class="hidden" onchange="importData(event)">
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- AI Settings & Import -->
+                    <div class="bg-blue-50 border border-blue-100 p-3 rounded-lg flex flex-col space-y-3">
+                        <div class="flex items-center space-x-2">
+                            <input type="password" id="api-key" placeholder="Gemini API Key (Optional for AI)" class="flex-1 form-input px-3 py-1.5 text-sm bg-white border border-blue-200 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            <button id="btn-ai-import" onclick="document.getElementById('ai-cv-upload').click()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded shadow-sm transition-colors flex items-center space-x-1 whitespace-nowrap">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                <span>Auto-Fill PDF</span>
+                            </button>
+                            <input type="file" id="ai-cv-upload" accept=".pdf,.txt" class="hidden" onchange="handleAiImport(event)">
+                        </div>
+                        <p class="text-[11px] text-blue-600 leading-tight">Your API key is stored locally in your browser. Used for AI Auto-Fill and AI Skill Extractor.</p>
                     </div>
                 </div>
 
-                <!-- API Key Configuration -->
-                <div class="mb-6 p-4 bg-yellow-50/50 border border-yellow-200 rounded-xl flex flex-col space-y-2 shadow-sm">
-                    <label class="text-sm font-semibold text-yellow-800 flex items-center space-x-2">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                        <span>Gemini API Key Setup</span>
-                    </label>
-                    <input type="password" id="api-key-input" class="form-input px-3 py-2 bg-white border border-yellow-300 rounded-lg shadow-sm focus:ring-2 focus:ring-yellow-500 focus:outline-none text-sm w-full" placeholder="Enter your Gemini API key...">
-                    <p class="text-xs text-yellow-700">Required for AI features. Get a free key from <a href="https://aistudio.google.com/app/apikey" target="_blank" class="underline font-semibold hover:text-yellow-900">Google AI Studio</a>. Saved securely in your browser's local storage.</p>
-                </div>
-
-                <div class="space-y-6 pb-20">
+                <div class="space-y-4">
                     
                     <!-- Personal Information -->
                     <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                         <button onclick="toggleAccordion('personal')" class="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition-colors focus:outline-none">
                             <div class="flex items-center space-x-3 font-semibold">
                                 <span class="text-blue-600">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                                 </span>
                                 <span>Personal Information</span>
                             </div>
-                            <svg id="chevron-personal" class="chevron open text-slate-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            <svg id="chevron-personal" class="chevron open text-slate-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                         </button>
                         <div id="acc-personal" class="accordion-content open">
                             <div class="p-4 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="flex flex-col space-y-1.5 md:col-span-2">
+                                    <label class="text-sm font-semibold">Profile Photo (Optional)</label>
+                                    <div class="flex items-center space-x-3">
+                                        <input type="file" id="photo-upload" accept="image/*" class="hidden" onchange="handlePhotoSelect(event)">
+                                        <button onclick="document.getElementById('photo-upload').click()" class="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 rounded-lg text-sm font-medium transition-colors">Choose Photo</button>
+                                        <button id="btn-clear-photo" onclick="clearPhoto()" class="hidden px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors">Remove</button>
+                                    </div>
+                                </div>
                                 <div class="flex flex-col space-y-1.5"><label class="text-sm font-semibold">Full Name</label><input type="text" id="p-fullName" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
-                                <div class="flex flex-col space-y-1.5"><label class="text-sm font-semibold">Job Title (Optional)</label><input type="text" id="p-jobTitle" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="e.g. Software Engineer"></div>
+                                <div class="flex flex-col space-y-1.5"><label class="text-sm font-semibold">Job Title</label><input type="text" id="p-jobTitle" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
                                 <div class="flex flex-col space-y-1.5"><label class="text-sm font-semibold">Email</label><input type="email" id="p-email" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
                                 <div class="flex flex-col space-y-1.5"><label class="text-sm font-semibold">Phone</label><input type="text" id="p-phone" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
                                 <div class="flex flex-col space-y-1.5"><label class="text-sm font-semibold">Location</label><input type="text" id="p-location" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
                                 <div class="flex flex-col space-y-1.5"><label class="text-sm font-semibold">LinkedIn</label><input type="text" id="p-linkedin" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
                                 <div class="flex flex-col space-y-1.5 md:col-span-2"><label class="text-sm font-semibold">GitHub / Portfolio</label><input type="text" id="p-github" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
-                                
-                                <div class="flex flex-col space-y-1.5 md:col-span-2">
-                                    <label class="text-sm font-semibold">Photograph (Optional)</label>
-                                    <div class="flex items-center space-x-3">
-                                        <input type="file" id="p-photo" accept="image/*" class="form-input flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-                                        <button id="btn-clear-photo" class="hidden px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-semibold border border-red-200 hover:bg-red-100 transition-colors shadow-sm">Clear</button>
-                                    </div>
-                                    <p class="text-xs text-slate-500">Note: Expected in certain regions (e.g., Germany, UAE) but strictly avoided in others (e.g., US, UK) for ATS compliance.</p>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -213,16 +157,16 @@
                         <button onclick="toggleAccordion('summary')" class="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition-colors focus:outline-none">
                             <div class="flex items-center space-x-3 font-semibold">
                                 <span class="text-blue-600">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
                                 </span>
                                 <span>Professional Summary</span>
                             </div>
-                            <svg id="chevron-summary" class="chevron text-slate-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            <svg id="chevron-summary" class="chevron text-slate-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                         </button>
                         <div id="acc-summary" class="accordion-content">
                             <div class="p-4 border-t border-slate-100">
                                 <div class="flex flex-col space-y-1.5">
-                                    <textarea id="f-summary" rows="4" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none resize-y" placeholder="A brief overview of your background..."></textarea>
+                                    <textarea id="f-summary" spellcheck="true" rows="4" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none resize-y" placeholder="A brief overview of your background..."></textarea>
                                 </div>
                             </div>
                         </div>
@@ -233,17 +177,17 @@
                         <button onclick="toggleAccordion('experience')" class="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition-colors focus:outline-none">
                             <div class="flex items-center space-x-3 font-semibold">
                                 <span class="text-blue-600">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
                                 </span>
                                 <span>Work Experience</span>
                             </div>
-                            <svg id="chevron-experience" class="chevron open text-slate-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            <svg id="chevron-experience" class="chevron open text-slate-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                         </button>
                         <div id="acc-experience" class="accordion-content open">
                             <div class="p-4 border-t border-slate-100 space-y-6">
                                 <div id="experience-container" class="space-y-6"></div>
                                 <button onclick="addExperience()" class="w-full py-3 border-2 border-dashed border-slate-300 rounded-lg text-slate-600 font-medium hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center space-x-2">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                                     <span>Add New Experience</span>
                                 </button>
                             </div>
@@ -255,17 +199,17 @@
                         <button onclick="toggleAccordion('education')" class="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition-colors focus:outline-none">
                             <div class="flex items-center space-x-3 font-semibold">
                                 <span class="text-blue-600">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
                                 </span>
                                 <span>Education</span>
                             </div>
-                            <svg id="chevron-education" class="chevron text-slate-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            <svg id="chevron-education" class="chevron text-slate-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                         </button>
                         <div id="acc-education" class="accordion-content">
                             <div class="p-4 border-t border-slate-100 space-y-6">
                                 <div id="education-container" class="space-y-6"></div>
                                 <button onclick="addEducation()" class="w-full py-3 border-2 border-dashed border-slate-300 rounded-lg text-slate-600 font-medium hover:border-blue-500 hover:text-blue-600 transition-colors flex items-center justify-center space-x-2">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                                     <span>Add New Education</span>
                                 </button>
                             </div>
@@ -277,29 +221,27 @@
                         <button onclick="toggleAccordion('skills')" class="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition-colors focus:outline-none">
                             <div class="flex items-center space-x-3 font-semibold">
                                 <span class="text-blue-600">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
                                 </span>
                                 <span>Skills</span>
                             </div>
-                            <svg id="chevron-skills" class="chevron text-slate-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            <svg id="chevron-skills" class="chevron text-slate-400" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
                         </button>
                         <div id="acc-skills" class="accordion-content">
-                            <div class="p-4 border-t border-slate-100 space-y-4">
-                                <!-- AI Skill Extractor Box -->
-                                <div class="flex flex-col space-y-1.5 p-4 bg-purple-50 rounded-lg border border-purple-100">
-                                    <label class="text-sm font-semibold text-purple-900">✨ AI Skill Extractor</label>
-                                    <p class="text-xs text-purple-700 mb-2">Paste the job description. Our AI will search the web for industry standards and extract the exact keywords you need to pass the ATS.</p>
-                                    <textarea id="f-job-description" rows="3" class="form-input px-3 py-2 bg-white border border-purple-200 rounded-lg shadow-sm focus:ring-2 focus:ring-purple-500 focus:outline-none resize-y" placeholder="Paste the job description here..."></textarea>
-                                    <button id="btn-extract-skills" onclick="extractSkillsFromJD()" class="mt-2 w-full py-2.5 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 transition-colors shadow-sm flex items-center justify-center space-x-2">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
-                                        <span>Auto-Extract & Search Skills</span>
-                                    </button>
+                            <div class="p-4 border-t border-slate-100">
+                                
+                                <div class="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                                    <label class="text-xs font-semibold text-blue-800 mb-1 block">AI Skill Extractor</label>
+                                    <div class="flex space-x-2">
+                                        <input type="text" id="job-desc-input" placeholder="Paste job description URL or text here..." class="flex-1 form-input px-3 py-1.5 text-sm bg-white border border-blue-200 rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                        <button id="btn-extract-skills" onclick="extractSkills()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded shadow-sm transition-colors whitespace-nowrap">Extract</button>
+                                    </div>
                                 </div>
+
                                 <div class="flex flex-col space-y-1.5">
                                     <label class="text-sm font-semibold">Core Skills (Comma separated)</label>
-                                    <textarea id="f-skills" rows="4" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none resize-y" placeholder="JavaScript, React, Agile..."></textarea>
+                                    <textarea id="f-skills" spellcheck="true" rows="4" class="form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none resize-y" placeholder="JavaScript, React, Agile..."></textarea>
                                 </div>
-                                <p class="text-xs text-slate-500">ATS parsers look for exact keyword matches. Ensure you list hard skills directly found in the job description.</p>
                             </div>
                         </div>
                     </div>
@@ -309,254 +251,151 @@
         </section>
 
         <!-- RIGHT PANEL: Live Preview -->
-        <section id="panel-preview" class="w-full lg:w-[55%] xl:w-[60%] bg-slate-400 overflow-y-auto p-4 lg:p-8 flex justify-center print-block print-p-0 print:bg-white hidden lg:flex">
+        <section id="panel-preview" class="w-full lg:w-[55%] xl:w-[60%] bg-slate-400 overflow-y-auto p-4 lg:p-8 flex justify-center print-block print-p-0 print:bg-white hidden lg:flex h-full">
             
             <div class="w-full max-w-[850px] print:max-w-none flex flex-col items-center">
                 <!-- Action Bar -->
-                <div class="w-full flex justify-between items-center mb-4 print-hidden px-2">
+                <div class="w-full flex justify-between items-center mb-4 print-hidden px-2 shrink-0">
                     <div class="flex items-center space-x-2 text-sm text-slate-100 bg-slate-700/50 px-3 py-1.5 rounded-full shadow-sm">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
                         <span>ATS Compliant Preview</span>
                     </div>
-                    <button onclick="handleDownloadPDF()" class="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg shadow-lg font-medium transition-all hover:-translate-y-0.5">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    <button onclick="downloadPDF()" class="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg shadow-lg font-medium transition-all hover:-translate-y-0.5">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                         <span>Download PDF</span>
                     </button>
                 </div>
 
                 <!-- ACTUAL RESUME DOCUMENT -->
-                <div class="bg-white shadow-2xl print-no-shadow w-full min-h-[1056px] text-black p-10 sm:p-12 print-p-0 print-container" style="font-family: Georgia, 'Times New Roman', serif;">
+                <div class="bg-white shadow-2xl print-no-shadow w-full min-h-[1056px] text-black print-p-0" style="font-family: Georgia, 'Times New Roman', serif;">
+                    
+                    <!-- Print Table Hack: Forces uniform margins on every printed page -->
                     <table class="w-full border-collapse border-0">
-                        <thead class="hidden print-table-header-group">
-                            <tr><td class="p-0 border-0"><div style="height: 0.75in;"></div></td></tr>
-                        </thead>
+                        <!-- Space for Top Margin -->
+                        <thead class="print-hidden"><tr><td style="height: 15mm;"></td></tr></thead>
                         <tbody>
                             <tr>
-                                <td id="resume-document" class="p-0 border-0 align-top">
-                                    <!-- Content injected via JS -->
+                                <td class="p-10 sm:p-12 print-p-0 align-top">
+                                    <div id="resume-content">
+                                        <!-- Content injected via JS -->
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
-                        <tfoot class="hidden print-table-footer-group">
-                            <tr><td class="p-0 border-0"><div style="height: 0.75in;"></div></td></tr>
-                        </tfoot>
+                        <!-- Space for Bottom Margin -->
+                        <tfoot class="print-hidden"><tr><td style="height: 15mm;"></td></tr></tfoot>
                     </table>
                 </div>
             </div>
         </section>
-
     </main>
 
     <script>
-        // --- State Management ---
-        let currentFileHandle = null; // Tracks the currently opened/saved file handle to overwrite it
-        
+        // Default Data
         const defaultData = {
-            personal: {
-                fullName: 'Alex Jonathan Doe', jobTitle: 'Software Engineer', email: 'alex.doe@example.com', 
-                phone: '+1 (555) 123-4567', location: 'San Francisco, CA', linkedin: 'linkedin.com/in/alexdoe', github: 'github.com/alexdoe', photo: ''
-            },
+            personal: { fullName: 'Alex Jonathan Doe', jobTitle: 'Software Engineer', email: 'alex.doe@example.com', phone: '+1 (555) 123-4567', location: 'San Francisco, CA', linkedin: 'linkedin.com/in/alexdoe', github: 'github.com/alexdoe', photo: null },
             summary: 'Detail-oriented and highly adaptable Software Engineer with 5+ years of experience in full-stack web development. Proven track record of architecting scalable applications and improving system performance.',
-            experience: [
-                { id: 1, title: 'Senior Software Engineer', company: 'Tech Innovators Inc.', location: 'San Francisco, CA', startDate: 'Jan 2021', endDate: 'Present', description: '• Spearheaded the migration of a legacy monolithic application to a microservices architecture, reducing deployment time by 40%.\n• Managed a team of 4 frontend engineers.\n• Optimized database queries, resulting in a 25% reduction in API response times.' }
-            ],
-            education: [
-                { id: 1, degree: 'Bachelor of Science in Computer Science', institution: 'University of California, Berkeley', location: 'Berkeley, CA', startDate: 'Aug 2014', endDate: 'May 2018', gpa: '3.8/4.0' }
-            ],
+            experience: [ { id: 1, title: 'Senior Software Engineer', company: 'Tech Innovators Inc.', location: 'San Francisco, CA', startDate: 'Jan 2021', endDate: 'Present', description: '• Spearheaded the migration of a legacy monolithic application to a microservices architecture, reducing deployment time by 40%.\n• Managed a team of 4 frontend engineers.\n• Optimized database queries, resulting in a 25% reduction in API response times.' } ],
+            education: [ { id: 1, degree: 'Bachelor of Science in Computer Science', institution: 'University of California, Berkeley', location: 'Berkeley, CA', startDate: 'Aug 2014', endDate: 'May 2018', gpa: '3.8/4.0' } ],
             skills: 'JavaScript, TypeScript, React, Node.js, Python, SQL, Docker, AWS, Git, Agile Methodologies'
         };
 
-        // Initialize from Memory if available
-        const STORAGE_KEY = 'ats_resume_builder_memory';
-        const savedMemory = localStorage.getItem(STORAGE_KEY);
-        let data;
-        try {
-            data = savedMemory ? JSON.parse(savedMemory) : JSON.parse(JSON.stringify(defaultData));
-            // Ensure object shape exists in case of corrupted memory
-            if (!data.personal) data.personal = defaultData.personal;
-            if (!data.experience) data.experience = [];
-            if (!data.education) data.education = [];
-        } catch (e) {
-            console.warn("Corrupted local storage detected, resetting to default.");
-            data = JSON.parse(JSON.stringify(defaultData));
-        }
+        let data = JSON.parse(JSON.stringify(defaultData));
+        let cropper = null;
 
-        let saveTimeout;
-        function saveToMemory() {
-            try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-                const indicator = document.getElementById('auto-save-indicator');
-                if (indicator) {
-                    indicator.classList.remove('opacity-0');
-                    clearTimeout(saveTimeout);
-                    saveTimeout = setTimeout(() => {
-                        indicator.classList.add('opacity-0');
-                    }, 2000);
-                }
-            } catch (e) {
-                console.warn("Could not save to local storage (image file may be too large).", e);
-            }
-        }
-
-        // --- Initialization & Event Listeners ---
+        // Initialize App on Load
         document.addEventListener('DOMContentLoaded', () => {
-            initFormValues();
-            
-            // API Key management
-            const apiKeyInput = document.getElementById('api-key-input');
-            const storedKey = localStorage.getItem('gemini_api_key');
-            if (storedKey) {
-                apiKeyInput.value = storedKey;
+            // Setup PDF.js worker securely
+            if (window['pdfjs-dist/build/pdf']) {
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
             }
-            apiKeyInput.addEventListener('input', (e) => {
-                localStorage.setItem('gemini_api_key', e.target.value.trim());
-            });
 
-            // Check if photo exists to show clear button on load
-            const clearPhotoBtn = document.getElementById('btn-clear-photo');
-            if (data.personal.photo && clearPhotoBtn) {
-                clearPhotoBtn.classList.remove('hidden');
-            }
-            
+            // Load API Key
+            const savedKey = localStorage.getItem('ats_gemini_api_key');
+            if(savedKey) document.getElementById('api-key').value = savedKey;
+
+            // Load Local Storage Data
+            try {
+                const savedData = localStorage.getItem('ats_resume_data');
+                if (savedData) data = JSON.parse(savedData);
+            } catch(e) { console.error('Corrupt save data, using defaults.'); }
+
+            // Initial Renders
+            initFormValues();
             renderExperienceForms();
             renderEducationForms();
-            renderPreview(false); // Do not flash auto-save on initial load
+            renderPreview();
+            setupEventListeners();
+        });
 
-            // Personal Info Listeners
+        function saveToMemory() {
+            localStorage.setItem('ats_resume_data', JSON.stringify(data));
+        }
+
+        function setupEventListeners() {
             const personalFields = ['fullName', 'jobTitle', 'email', 'phone', 'location', 'linkedin', 'github'];
             personalFields.forEach(field => {
-                document.getElementById(`p-${field}`).addEventListener('input', (e) => {
+                const el = document.getElementById(`p-${field}`);
+                if(el) el.addEventListener('input', (e) => {
                     data.personal[field] = e.target.value;
                     renderPreview();
+                    saveToMemory();
                 });
             });
 
-            // Summary & Skills Listeners
-            document.getElementById('f-summary').addEventListener('input', (e) => { data.summary = e.target.value; renderPreview(); });
-            document.getElementById('f-skills').addEventListener('input', (e) => { data.skills = e.target.value; renderPreview(); });
+            document.getElementById('f-summary').addEventListener('input', (e) => { data.summary = e.target.value; renderPreview(); saveToMemory(); });
+            document.getElementById('f-skills').addEventListener('input', (e) => { data.skills = e.target.value; renderPreview(); saveToMemory(); });
 
-            // Photo & Cropping Listeners
-            const photoInput = document.getElementById('p-photo');
-            const cropModal = document.getElementById('crop-modal');
-            const imageToCrop = document.getElementById('image-to-crop');
-            const btnApplyCrop = document.getElementById('btn-apply-crop');
-            const btnCancelCrop = document.getElementById('btn-cancel-crop');
-            const btnCloseModal = document.getElementById('btn-close-modal');
-            let cropper = null;
-            
-            photoInput.addEventListener('change', (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = function(event) {
-                        imageToCrop.src = event.target.result;
-                        imageToCrop.classList.remove('hidden');
-                        cropModal.classList.remove('hidden');
-                        
-                        // Destroy existing cropper if it exists
-                        if (cropper) { cropper.destroy(); }
-                        
-                        // Initialize CropperJS
-                        cropper = new Cropper(imageToCrop, {
-                            aspectRatio: 3 / 4, // 3:4 ratio matches the w-24 h-32 styling in the preview
-                            viewMode: 1, 
-                            dragMode: 'move', 
-                            autoCropArea: 0.8,
-                            restore: false,
-                            guides: true,
-                            center: true,
-                            highlight: false,
-                            cropBoxMovable: true,
-                            cropBoxResizable: true,
-                            toggleDragModeOnDblclick: false,
-                        });
-                    };
-                    reader.readAsDataURL(file);
-                }
-            });
-
-            function closeCropModal() {
-                cropModal.classList.add('hidden');
-                photoInput.value = ''; // Reset file input so same file can be selected again
-                imageToCrop.classList.add('hidden');
-                if (cropper) {
-                    cropper.destroy();
-                    cropper = null;
-                }
-            }
-
-            btnCancelCrop.addEventListener('click', closeCropModal);
-            btnCloseModal.addEventListener('click', closeCropModal);
-
-            btnApplyCrop.addEventListener('click', () => {
-                if (!cropper) return;
-                
-                // Get the cropped canvas and convert to Base64 data URL
-                const canvas = cropper.getCroppedCanvas({
-                    width: 300, 
-                    height: 400
-                });
-                
-                data.personal.photo = canvas.toDataURL('image/jpeg', 0.9);
-                clearPhotoBtn.classList.remove('hidden');
-                renderPreview();
-                closeCropModal();
-            });
-
-            clearPhotoBtn.addEventListener('click', (e) => {
-                photoInput.value = '';
-                data.personal.photo = '';
-                clearPhotoBtn.classList.add('hidden');
-                renderPreview();
-            });
-
-            // Dynamic Lists Event Delegation (Experience)
             document.getElementById('experience-container').addEventListener('input', (e) => {
                 if (e.target.classList.contains('dyn-input')) {
                     const id = parseInt(e.target.dataset.id);
                     const field = e.target.dataset.field;
                     const item = data.experience.find(x => x.id === id);
-                    if (item) { item[field] = e.target.value; renderPreview(); }
+                    if (item) { item[field] = e.target.value; renderPreview(); saveToMemory(); }
                 }
             });
 
-            // Dynamic Lists Event Delegation (Education)
             document.getElementById('education-container').addEventListener('input', (e) => {
                 if (e.target.classList.contains('dyn-input')) {
                     const id = parseInt(e.target.dataset.id);
                     const field = e.target.dataset.field;
                     const item = data.education.find(x => x.id === id);
-                    if (item) { item[field] = e.target.value; renderPreview(); }
+                    if (item) { item[field] = e.target.value; renderPreview(); saveToMemory(); }
                 }
             });
-        });
 
-        // --- Form Rendering Functions ---
+            document.getElementById('api-key').addEventListener('change', (e) => {
+                localStorage.setItem('ats_gemini_api_key', e.target.value);
+            });
+        }
+
         function initFormValues() {
             Object.keys(data.personal).forEach(key => {
-                if (document.getElementById(`p-${key}`) && key !== 'photo') {
-                    document.getElementById(`p-${key}`).value = data.personal[key];
-                }
+                if (key !== 'photo' && document.getElementById(`p-${key}`)) document.getElementById(`p-${key}`).value = data.personal[key] || '';
             });
-            document.getElementById('f-summary').value = data.summary;
-            document.getElementById('f-skills').value = data.skills;
+            document.getElementById('f-summary').value = data.summary || '';
+            document.getElementById('f-skills').value = data.skills || '';
+            
+            const clearBtn = document.getElementById('btn-clear-photo');
+            if(data.personal.photo) clearBtn.classList.remove('hidden');
+            else clearBtn.classList.add('hidden');
         }
 
         function renderExperienceForms() {
             const container = document.getElementById('experience-container');
             container.innerHTML = data.experience.map((exp, index) => `
                 <div class="p-4 border border-slate-200 rounded-lg bg-slate-50 relative group">
-                    <button onclick="removeExperience(${exp.id})" class="absolute top-4 right-4 text-slate-400 hover:text-red-500 transition-colors" title="Remove"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                    <button onclick="removeExperience(${exp.id})" class="absolute top-4 right-4 text-slate-400 hover:text-red-500 transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
                     <h4 class="text-sm font-semibold text-slate-700 mb-4 uppercase tracking-wider">Experience #${index + 1}</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="flex flex-col space-y-1.5"><label class="text-xs font-semibold">Job Title</label><input type="text" data-id="${exp.id}" data-field="title" value="${escapeHtml(exp.title)}" class="dyn-input form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
                         <div class="flex flex-col space-y-1.5"><label class="text-xs font-semibold">Company</label><input type="text" data-id="${exp.id}" data-field="company" value="${escapeHtml(exp.company)}" class="dyn-input form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
                         <div class="flex flex-col space-y-1.5"><label class="text-xs font-semibold">Location</label><input type="text" data-id="${exp.id}" data-field="location" value="${escapeHtml(exp.location)}" class="dyn-input form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
                         <div class="grid grid-cols-2 gap-2">
-                            <div class="flex flex-col space-y-1.5"><label class="text-xs font-semibold">Start Date</label><input type="text" data-id="${exp.id}" data-field="startDate" value="${escapeHtml(exp.startDate)}" class="dyn-input form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="MMM YYYY"></div>
-                            <div class="flex flex-col space-y-1.5"><label class="text-xs font-semibold">End Date</label><input type="text" data-id="${exp.id}" data-field="endDate" value="${escapeHtml(exp.endDate)}" class="dyn-input form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Present"></div>
+                            <div class="flex flex-col space-y-1.5"><label class="text-xs font-semibold">Start Date</label><input type="text" data-id="${exp.id}" data-field="startDate" value="${escapeHtml(exp.startDate)}" class="dyn-input form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
+                            <div class="flex flex-col space-y-1.5"><label class="text-xs font-semibold">End Date</label><input type="text" data-id="${exp.id}" data-field="endDate" value="${escapeHtml(exp.endDate)}" class="dyn-input form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
                         </div>
-                        <div class="flex flex-col space-y-1.5 md:col-span-2"><label class="text-xs font-semibold">Description (Use • or - for bullets)</label><textarea data-id="${exp.id}" data-field="description" rows="4" class="dyn-input form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">${escapeHtml(exp.description)}</textarea></div>
+                        <div class="flex flex-col space-y-1.5 md:col-span-2"><label class="text-xs font-semibold">Description (Use • or - for bullets)</label><textarea data-id="${exp.id}" data-field="description" spellcheck="true" rows="4" class="dyn-input form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none resize-y">${escapeHtml(exp.description)}</textarea></div>
                     </div>
                 </div>
             `).join('');
@@ -566,7 +405,7 @@
             const container = document.getElementById('education-container');
             container.innerHTML = data.education.map((edu, index) => `
                 <div class="p-4 border border-slate-200 rounded-lg bg-slate-50 relative group">
-                    <button onclick="removeEducation(${edu.id})" class="absolute top-4 right-4 text-slate-400 hover:text-red-500 transition-colors" title="Remove"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                    <button onclick="removeEducation(${edu.id})" class="absolute top-4 right-4 text-slate-400 hover:text-red-500 transition-colors"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
                     <h4 class="text-sm font-semibold text-slate-700 mb-4 uppercase tracking-wider">Education #${index + 1}</h4>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="flex flex-col space-y-1.5"><label class="text-xs font-semibold">Degree / Program</label><input type="text" data-id="${edu.id}" data-field="degree" value="${escapeHtml(edu.degree)}" class="dyn-input form-input px-3 py-2 bg-white border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"></div>
@@ -582,324 +421,255 @@
             `).join('');
         }
 
-        // --- Data Manipulation Functions ---
-        
-        async function handleAiImport(event) {
-            const file = event.target.files[0];
+        function addExperience() { data.experience.push({ id: Date.now(), title: '', company: '', location: '', startDate: '', endDate: '', description: '' }); renderExperienceForms(); renderPreview(); saveToMemory(); }
+        function removeExperience(id) { data.experience = data.experience.filter(exp => exp.id !== id); renderExperienceForms(); renderPreview(); saveToMemory(); }
+        function addEducation() { data.education.push({ id: Date.now(), institution: '', degree: '', location: '', startDate: '', endDate: '', gpa: '' }); renderEducationForms(); renderPreview(); saveToMemory(); }
+        function removeEducation(id) { data.education = data.education.filter(edu => edu.id !== id); renderEducationForms(); renderPreview(); saveToMemory(); }
+
+        function handlePhotoSelect(e) {
+            const file = e.target.files[0];
             if (!file) return;
-
-            const btn = document.getElementById('btn-ai-import');
-            if (btn.disabled) return;
-            
-            const originalHtml = btn.innerHTML;
-            btn.innerHTML = `<svg class="animate-spin h-4 w-4 mr-1 text-purple-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span class="hidden sm:inline">Reading...</span>`;
-            btn.disabled = true;
-
-            try {
-                let extractedText = "";
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('crop-image').src = e.target.result;
+                document.getElementById('crop-modal').classList.remove('hidden');
                 
-                // 1. Extract Text from PDF or TXT
-                if (file.type === "application/pdf") {
-                    const arrayBuffer = await file.arrayBuffer();
-                    const typedarray = new Uint8Array(arrayBuffer);
-                    const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
-                    let text = "";
-                    for (let i = 1; i <= pdf.numPages; i++) {
-                        const page = await pdf.getPage(i);
-                        const content = await page.getTextContent();
-                        const pageText = content.items.map(item => item.str).join(" ");
-                        text += pageText + "\n";
-                    }
-                    extractedText = text;
-                } else if (file.type === "text/plain") {
-                    extractedText = await file.text();
-                } else {
-                    alert("Unsupported file type. Please upload a PDF or TXT file.");
-                    throw new Error("Unsupported format");
-                }
-
-                const apiKey = document.getElementById('api-key-input').value.trim();
-                if (!apiKey) {
-                    alert("Please enter your Gemini API Key at the top of the editor.");
-                    throw new Error("Missing API Key");
-                }
-
-                const prompt = `Act as an expert ATS resume parser. Parse the following raw CV text and return ONLY a JSON object matching this exact structure:
-{
-  "personal": { "fullName": "", "jobTitle": "", "email": "", "phone": "", "location": "", "linkedin": "", "github": "" },
-  "summary": "",
-  "experience": [ { "title": "", "company": "", "location": "", "startDate": "", "endDate": "", "description": "use • for bullet points" } ],
-  "education": [ { "degree": "", "institution": "", "location": "", "startDate": "", "endDate": "", "gpa": "" } ],
-  "skills": "comma separated skills list"
-}
-
-IMPORTANT: Return ONLY a valid JSON object. No markdown formatting, no conversational text, and no explanations.
-
-Raw CV Text:
-${extractedText}`;
-
-                // Force JSON output via generationConfig
-                const payload = {
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { responseMimeType: "application/json" }
-                };
-
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
-
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                if (cropper) cropper.destroy();
+                cropper = new Cropper(document.getElementById('crop-image'), {
+                    aspectRatio: 3 / 4, viewMode: 1, autoCropArea: 0.8
                 });
-
-                if (!response.ok) throw new Error(`API returned status ${response.status}`);
-
-                const responseText = await response.text();
-                if (!responseText) throw new Error("Empty API response");
-                
-                const result = JSON.parse(responseText);
-                if (result.error) throw new Error(result.error.message);
-                if (!result.candidates || result.candidates.length === 0 || !result.candidates[0].content) {
-                    throw new Error("AI returned an empty response or blocked the request for safety reasons.");
-                }
-                
-                if (result.candidates[0].content && result.candidates[0].content.parts[0].text) {
-                    let jsonStr = result.candidates[0].content.parts[0].text;
-                    let parsedData;
-                    
-                    try {
-                        const cleanStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-                        parsedData = JSON.parse(cleanStr);
-                    } catch (e) {
-                        // Fallback boundary extraction
-                        const startIdx = jsonStr.indexOf('{');
-                        const endIdx = jsonStr.lastIndexOf('}');
-                        if (startIdx === -1 || endIdx === -1) throw new Error("AI failed to output a JSON object.");
-                        parsedData = JSON.parse(jsonStr.substring(startIdx, endIdx + 1));
-                    }
-
-                    // Add IDs back to array elements for UI mapping
-                    if (parsedData.experience) {
-                        parsedData.experience = parsedData.experience.map((e, i) => ({...e, id: Date.now() + i}));
-                    } else {
-                        parsedData.experience = [];
-                    }
-                    if (parsedData.education) {
-                        parsedData.education = parsedData.education.map((e, i) => ({...e, id: Date.now() + 100 + i}));
-                    } else {
-                        parsedData.education = [];
-                    }
-                    
-                    // Preserve the existing uploaded photo
-                    if (!parsedData.personal) parsedData.personal = {};
-                    parsedData.personal.photo = data.personal.photo || '';
-                    
-                    data = parsedData;
-                    
-                    initFormValues();
-                    renderExperienceForms();
-                    renderEducationForms();
-                    renderPreview();
-                    
-                    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-600"><polyline points="20 6 9 17 4 12"></polyline></svg><span class="hidden sm:inline text-green-600">Success!</span>`;
-                } else {
-                    throw new Error("Invalid AI response structure");
-                }
-            } catch (err) {
-                console.error("AI Import Error:", err);
-                btn.innerHTML = `<span class="text-red-600 text-sm font-bold px-1">Error</span>`;
-            }
-            
-            setTimeout(() => {
-                btn.innerHTML = originalHtml;
-                btn.disabled = false;
-                event.target.value = '';
-            }, 3000);
+            };
+            reader.readAsDataURL(file);
+            e.target.value = ''; // reset input
         }
 
-        function addExperience() {
-            data.experience.push({ id: Date.now(), title: '', company: '', location: '', startDate: '', endDate: '', description: '' });
-            renderExperienceForms(); renderPreview();
-        }
-        function removeExperience(id) {
-            data.experience = data.experience.filter(exp => exp.id !== id);
-            renderExperienceForms(); renderPreview();
-        }
-        function addEducation() {
-            data.education.push({ id: Date.now(), institution: '', degree: '', location: '', startDate: '', endDate: '', gpa: '' });
-            renderEducationForms(); renderPreview();
-        }
-        function removeEducation(id) {
-            data.education = data.education.filter(edu => edu.id !== id);
-            renderEducationForms(); renderPreview();
+        function closeCropModal() {
+            document.getElementById('crop-modal').classList.add('hidden');
+            if (cropper) { cropper.destroy(); cropper = null; }
         }
 
-        async function exportData() {
+        function applyCrop() {
+            if (!cropper) return;
+            const canvas = cropper.getCroppedCanvas({ width: 300, height: 400 });
+            data.personal.photo = canvas.toDataURL('image/jpeg', 0.9);
+            document.getElementById('btn-clear-photo').classList.remove('hidden');
+            closeCropModal();
+            renderPreview();
+            saveToMemory();
+        }
+
+        function clearPhoto() {
+            data.personal.photo = null;
+            document.getElementById('btn-clear-photo').classList.add('hidden');
+            renderPreview();
+            saveToMemory();
+        }
+
+        function exportData() {
             const dataStr = JSON.stringify(data, null, 2);
-            const btn = document.getElementById('btn-export-data');
-            const originalHtml = btn.innerHTML;
-            let saveSuccess = false;
-            
-            try {
-                if (window.showSaveFilePicker) {
-                    if (!currentFileHandle) {
-                        const namePart = data.personal.fullName ? data.personal.fullName.trim().replace(/\s+/g, '_') : 'Resume';
-                        currentFileHandle = await window.showSaveFilePicker({
-                            suggestedName: `${namePart}_Data.json`,
-                            types: [{ description: 'JSON File', accept: {'application/json': ['.json']} }],
-                        });
-                    }
-                    const writable = await currentFileHandle.createWritable();
-                    await writable.write(dataStr);
-                    await writable.close();
-                    saveSuccess = true;
-                } else {
-                    fallbackDownload(dataStr);
-                    saveSuccess = true;
-                }
-            } catch (err) {
-                if (err.name !== 'AbortError') {
-                    console.warn("File System API blocked. Using fallback download.");
-                    fallbackDownload(dataStr);
-                    saveSuccess = true;
-                }
-            }
-
-            if (saveSuccess) {
-                btn.classList.replace('text-slate-700', 'text-green-600');
-                btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span class="hidden sm:inline">Saved!</span>`;
-                setTimeout(() => {
-                    btn.innerHTML = originalHtml;
-                    btn.classList.replace('text-green-600', 'text-slate-700');
-                }, 2000);
-            }
-        }
-
-        function fallbackDownload(dataStr) {
-            const blob = new Blob([dataStr], { type: "application/json" });
+            const blob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            const namePart = data.personal.fullName ? data.personal.fullName.trim().replace(/\s+/g, '_') : 'Resume';
-            a.download = `${namePart}_Data.json`;
+            a.download = `${data.personal.fullName.replace(/\s+/g, '_') || 'Resume'}_Backup.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }
 
-        async function triggerLoad() {
-            if (window.showOpenFilePicker) {
-                try {
-                    const [fileHandle] = await window.showOpenFilePicker({
-                        types: [{ description: 'JSON File', accept: {'application/json': ['.json']} }],
-                    });
-                    currentFileHandle = fileHandle;
-                    const file = await fileHandle.getFile();
-                    processLoadedFile(file);
-                } catch (err) {
-                    if (err.name !== 'AbortError') {
-                        document.getElementById('file-import').click();
-                    }
-                }
-            } else {
-                document.getElementById('file-import').click();
-            }
-        }
-
-        function importData(event) {
-            const file = event.target.files[0];
+        function importData(e) {
+            const file = e.target.files[0];
             if (!file) return;
-            currentFileHandle = null;
-            processLoadedFile(file);
-            event.target.value = '';
-        }
-
-        function processLoadedFile(file) {
             const reader = new FileReader();
             reader.onload = (e) => {
                 try {
-                    const importedData = JSON.parse(e.target.result);
-                    if (importedData && importedData.personal) {
-                        data = importedData;
+                    const parsed = JSON.parse(e.target.result);
+                    if (parsed && parsed.personal) {
+                        data = parsed;
                         initFormValues();
-                        
-                        const clearPhotoBtn = document.getElementById('btn-clear-photo');
-                        if (data.personal.photo && clearPhotoBtn) clearPhotoBtn.classList.remove('hidden');
-                        else if (clearPhotoBtn) clearPhotoBtn.classList.add('hidden');
-                        
                         renderExperienceForms();
                         renderEducationForms();
                         renderPreview();
-                        
-                        const btn = document.getElementById('btn-import-trigger');
-                        const originalHtml = btn.innerHTML;
-                        btn.classList.replace('text-slate-700', 'text-green-600');
-                        btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span class="hidden sm:inline">Loaded!</span>`;
-                        setTimeout(() => {
-                            btn.innerHTML = originalHtml;
-                            btn.classList.replace('text-green-600', 'text-slate-700');
-                        }, 2500);
-                    }
-                } catch(err) {
-                    console.error("Failed to parse JSON file", err);
-                }
+                        saveToMemory();
+                        alert("Resume loaded successfully!");
+                    } else { alert("Invalid Resume Data format."); }
+                } catch (err) { alert("Error reading file."); }
             };
             reader.readAsText(file);
+            e.target.value = ''; // reset
         }
 
-        function handleDownloadPDF() {
-            const originalTitle = document.title;
-            const namePart = data.personal.fullName ? data.personal.fullName.trim().replace(/\s+/g, '_') : 'Name';
-            const jobPart = data.personal.jobTitle ? data.personal.jobTitle.trim().replace(/\s+/g, '_') : 'job_position';
-            document.title = `${namePart}_${jobPart}`;
-            window.print();
-            document.title = originalTitle;
-        }
+        async function handleAiImport(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const apiKey = document.getElementById('api-key').value.trim();
+            if(!apiKey) return alert("Please enter your Gemini API Key first.");
 
-        // --- Preview Rendering Logic ---
-        function renderPreview(autoSave = true) {
-            if (autoSave) {
-                saveToMemory();
+            const btn = document.getElementById('btn-ai-import');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = 'Extracting...';
+            btn.disabled = true;
+
+            try {
+                let extractedText = '';
+                if(file.type === 'application/pdf') {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const pdf = await pdfjsLib.getDocument({data: new Uint8Array(arrayBuffer)}).promise;
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        extractedText += textContent.items.map(s => s.str).join(' ') + '\n';
+                    }
+                } else {
+                    extractedText = await file.text();
+                }
+
+                if(!extractedText.trim()) throw new Error("Could not read text from document.");
+
+                const prompt = `
+You are a CV parser. Extract the information from the following text and format it EXACTLY according to the JSON structure provided.
+Do NOT include any explanations, introductory text, or markdown blocks (like \`\`\`json). Return ONLY raw JSON.
+
+JSON STRUCTURE:
+{
+  "personal": { "fullName": "", "jobTitle": "", "email": "", "phone": "", "location": "", "linkedin": "", "github": "" },
+  "summary": "",
+  "experience": [ { "id": 1, "title": "", "company": "", "location": "", "startDate": "", "endDate": "", "description": "" } ],
+  "education": [ { "id": 1, "degree": "", "institution": "", "location": "", "startDate": "", "endDate": "", "gpa": "" } ],
+  "skills": "Comma separated string of skills"
+}
+
+TEXT TO PARSE:
+${extractedText.substring(0, 15000)}`;
+
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } })
+                });
+
+                if(!response.ok) {
+                    const errStr = await response.text();
+                    throw new Error("API Error: " + errStr);
+                }
+
+                const jsonResp = await response.json();
+                let jsonStr = jsonResp.candidates[0].content.parts[0].text;
+                
+                // Cleanup Markdown if AI hallucinated it despite responseMimeType
+                jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+                const parsedData = JSON.parse(jsonStr);
+                
+                // Merge retaining photo
+                const existingPhoto = data.personal.photo;
+                data = { ...defaultData, ...parsedData }; // Ensure array structure exists
+                
+                // Re-assign array IDs so UI logic doesn't break
+                if(data.experience) data.experience.forEach((e, i) => e.id = Date.now() + i);
+                if(data.education) data.education.forEach((e, i) => e.id = Date.now() + 100 + i);
+                data.personal.photo = existingPhoto;
+
+                initFormValues(); renderExperienceForms(); renderEducationForms(); renderPreview(); saveToMemory();
+                
+                btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Success!</span>`;
+            } catch(error) {
+                console.error(error);
+                alert("Import failed: " + error.message);
+                btn.innerHTML = 'Error. Try Again.';
+            } finally {
+                e.target.value = '';
+                setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 3000);
             }
+        }
 
+        async function extractSkills() {
+            const apiKey = document.getElementById('api-key').value.trim();
+            const jobDesc = document.getElementById('job-desc-input').value.trim();
+            
+            if(!apiKey) return alert("Please enter your Gemini API Key first.");
+            if(!jobDesc) return alert("Please paste a job description or keywords first.");
+
+            const btn = document.getElementById('btn-extract-skills');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = 'Extracting...';
+            btn.disabled = true;
+
+            try {
+                const prompt = `Analyze this job description. Extract the core hard skills and technical requirements. Return a single, comma-separated string of these skills. Do NOT return markdown or conversational text. Just the skills.\n\nDescription: ${jobDesc}`;
+
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+
+                if(!response.ok) throw new Error(await response.text());
+                
+                const jsonResp = await response.json();
+                let skillsText = jsonResp.candidates[0].content.parts[0].text.trim();
+                
+                // Append to existing
+                const existing = document.getElementById('f-skills').value;
+                const combined = existing ? `${existing}, ${skillsText}` : skillsText;
+                
+                // Clean duplicates (simple)
+                const uniqueSkills = [...new Set(combined.split(',').map(s => s.trim()).filter(s => s))].join(', ');
+                
+                data.skills = uniqueSkills;
+                document.getElementById('f-skills').value = uniqueSkills;
+                renderPreview(); saveToMemory();
+                
+                btn.innerHTML = 'Added!';
+                document.getElementById('job-desc-input').value = ''; // clear
+            } catch(error) {
+                console.error(error);
+                alert("Skill Extraction failed: " + error.message);
+                btn.innerHTML = 'Failed';
+            } finally {
+                setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 3000);
+            }
+        }
+
+        function renderPreview() {
             const p = data.personal;
-            let html = `
-                <header class="mb-6 pb-4 border-b-[1.5px] border-black flex items-center ${p.photo ? 'justify-between text-left' : 'flex-col text-center'}">
-                    <div class="${p.photo ? 'flex-1' : ''}">
-                        <h1 class="text-3xl sm:text-4xl font-bold uppercase tracking-wide mb-2">${escapeHtml(p.fullName) || 'YOUR NAME'}</h1>
-                        ${p.jobTitle ? `<h2 class="text-lg text-gray-800 mb-3">${escapeHtml(p.jobTitle)}</h2>` : ''}
-                        
-                        <div class="flex flex-wrap ${p.photo ? 'justify-start' : 'justify-center'} items-center gap-x-3 gap-y-1 text-sm sm:text-base text-gray-800">
-                            ${p.location ? `<span>${escapeHtml(p.location)}</span>` : ''}
-                            ${p.phone ? `${p.location ? '<span class="text-gray-400">|</span>' : ''}<span>${escapeHtml(p.phone)}</span>` : ''}
-                            ${p.email ? `${(p.location || p.phone) ? '<span class="text-gray-400">|</span>' : ''}<a href="mailto:${escapeHtml(p.email)}" class="hover:underline">${escapeHtml(p.email)}</a>` : ''}
-                        </div>
-                        
-                        <div class="flex flex-wrap ${p.photo ? 'justify-start' : 'justify-center'} items-center gap-x-3 gap-y-1 text-sm sm:text-base text-gray-800 mt-1">
-                            ${p.linkedin ? `<a href="https://${escapeHtml(p.linkedin).replace(/^https?:\/\//, '')}" class="hover:underline">${escapeHtml(p.linkedin).replace(/^https?:\/\//, '')}</a>` : ''}
-                            ${(p.linkedin && p.github) ? '<span class="text-gray-400">|</span>' : ''}
-                            ${p.github ? `<a href="https://${escapeHtml(p.github).replace(/^https?:\/\//, '')}" class="hover:underline">${escapeHtml(p.github).replace(/^https?:\/\//, '')}</a>` : ''}
-                        </div>
-                    </div>
-                    ${p.photo ? `
-                    <div class="ml-6 shrink-0">
-                        <img src="${p.photo}" alt="Profile Photo" class="w-24 h-32 sm:w-28 sm:h-36 object-cover rounded-md border border-gray-300 shadow-sm" style="-webkit-print-color-adjust: exact; print-color-adjust: exact;">
-                    </div>
-                    ` : ''}
-                </header>
+            let html = `<header class="mb-6 pb-4 border-b-[1.5px] border-black text-center ${p.photo ? 'flex justify-between items-center text-left' : ''}">`;
+            
+            let contactHtml = `
+                <h1 class="text-3xl sm:text-4xl font-bold uppercase tracking-wide mb-2">${escapeHtml(p.fullName) || 'YOUR NAME'}</h1>
+                ${p.jobTitle ? `<h2 class="text-lg text-gray-800 mb-3">${escapeHtml(p.jobTitle)}</h2>` : ''}
+                
+                <div class="flex flex-wrap ${p.photo ? 'justify-start' : 'justify-center'} items-center gap-x-3 gap-y-1 text-sm sm:text-base text-gray-800">
+                    ${p.location ? `<span>${escapeHtml(p.location)}</span>` : ''}
+                    ${p.phone ? `${p.location ? '<span class="text-gray-400">|</span>' : ''}<span>${escapeHtml(p.phone)}</span>` : ''}
+                    ${p.email ? `${(p.location || p.phone) ? '<span class="text-gray-400">|</span>' : ''}<a href="mailto:${escapeHtml(p.email)}" class="hover:underline">${escapeHtml(p.email)}</a>` : ''}
+                </div>
+                
+                <div class="flex flex-wrap ${p.photo ? 'justify-start' : 'justify-center'} items-center gap-x-3 gap-y-1 text-sm sm:text-base text-gray-800 mt-1">
+                    ${p.linkedin ? `<a href="https://${escapeHtml(p.linkedin).replace(/^https?:\/\//, '')}" class="hover:underline">${escapeHtml(p.linkedin).replace(/^https?:\/\//, '')}</a>` : ''}
+                    ${(p.linkedin && p.github) ? '<span class="text-gray-400">|</span>' : ''}
+                    ${p.github ? `<a href="https://${escapeHtml(p.github).replace(/^https?:\/\//, '')}" class="hover:underline">${escapeHtml(p.github).replace(/^https?:\/\//, '')}</a>` : ''}
+                </div>
             `;
 
-            if (data.summary.trim()) {
+            if (p.photo) {
+                html += `<div class="flex-1">${contactHtml}</div><img src="${p.photo}" class="w-24 h-32 object-cover ml-6 border border-gray-300 shadow-sm" alt="Profile">`;
+            } else {
+                html += `<div>${contactHtml}</div>`;
+            }
+            html += `</header>`;
+
+            if (data.summary && data.summary.trim()) {
                 html += `
-                    <section class="mb-6">
+                    <section class="mb-6 break-inside-avoid">
                         <h2 class="text-lg font-bold uppercase tracking-widest border-b border-gray-300 mb-3 pb-1 text-gray-900">Professional Summary</h2>
                         <p class="text-[15px] leading-relaxed text-gray-800 text-justify">${escapeHtml(data.summary)}</p>
                     </section>
                 `;
             }
 
-            if (data.experience.length > 0) {
+            if (data.experience && data.experience.length > 0) {
                 html += `<section class="mb-6"><h2 class="text-lg font-bold uppercase tracking-widest border-b border-gray-300 mb-3 pb-1 text-gray-900">Work Experience</h2><div class="space-y-5">`;
                 data.experience.forEach(exp => {
                     html += `
@@ -909,14 +679,14 @@ ${extractedText}`;
                                 <span class="text-sm font-semibold text-gray-700 whitespace-nowrap ml-2">${escapeHtml(exp.startDate)} ${(exp.startDate && exp.endDate) ? '–' : ''} ${escapeHtml(exp.endDate)}</span>
                             </div>
                             ${exp.location ? `<div class="text-sm text-gray-600 mb-2 italic">${escapeHtml(exp.location)}</div>` : ''}
-                            ${exp.description ? `<div class="text-[14.5px] leading-snug text-gray-800">${renderBullets(exp.description)}</div>` : ''}
+                            ${exp.description ? `<div class="text-[14.5px] leading-snug text-gray-800 mt-1">${renderBullets(exp.description)}</div>` : ''}
                         </div>
                     `;
                 });
                 html += `</div></section>`;
             }
 
-            if (data.education.length > 0) {
+            if (data.education && data.education.length > 0) {
                 html += `<section class="mb-6"><h2 class="text-lg font-bold uppercase tracking-widest border-b border-gray-300 mb-3 pb-1 text-gray-900">Education</h2><div class="space-y-4">`;
                 data.education.forEach(edu => {
                     html += `
@@ -935,7 +705,7 @@ ${extractedText}`;
                 html += `</div></section>`;
             }
 
-            if (data.skills.trim()) {
+            if (data.skills && data.skills.trim()) {
                 html += `
                     <section class="mb-6 break-inside-avoid">
                         <h2 class="text-lg font-bold uppercase tracking-widest border-b border-gray-300 mb-3 pb-1 text-gray-900">Technical & Professional Skills</h2>
@@ -944,10 +714,23 @@ ${extractedText}`;
                 `;
             }
 
-            document.getElementById('resume-document').innerHTML = html;
+            document.getElementById('resume-content').innerHTML = html;
         }
 
-        // --- Utility Functions ---
+        function downloadPDF() {
+            // Setup dynamic file name
+            const originalTitle = document.title;
+            const name = data.personal.fullName ? data.personal.fullName.replace(/\s+/g, '_') : 'Resume';
+            const position = data.personal.jobTitle ? `_${data.personal.jobTitle.replace(/\s+/g, '_')}` : '';
+            document.title = `${name}${position}`;
+            
+            // Trigger native browser print which respects the @media print CSS
+            window.print();
+            
+            // Restore title
+            document.title = originalTitle;
+        }
+
         function escapeHtml(unsafe) {
             if (!unsafe) return '';
             return unsafe.toString()
@@ -972,7 +755,6 @@ ${extractedText}`;
                 }).join('') + `</ul>`;
         }
 
-        // --- UI Interactions ---
         function toggleAccordion(id) {
             const content = document.getElementById(`acc-${id}`);
             const chevron = document.getElementById(`chevron-${id}`);
@@ -1007,308 +789,6 @@ ${extractedText}`;
                 tabEdit.classList.replace('bg-blue-600', 'bg-slate-100');
                 tabEdit.classList.replace('text-white', 'text-slate-600');
             }
-        }
-
-        // --- AI Skill Extraction logic ---
-        async function extractSkillsFromJD() {
-            const jdText = document.getElementById('f-job-description').value;
-            if (!jdText.trim()) return;
-
-            const btn = document.getElementById('btn-extract-skills');
-            if (btn.disabled) return;
-            
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<svg class="animate-spin h-4 w-4 text-white mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Analyzing & Searching...';
-            btn.disabled = true;
-
-            try {
-                const prompt = `Act as an expert ATS resume optimizer. I am applying for a job with the following description. Search the internet to find the most common and relevant industry skills for this specific role and domain, and combine them with the skills explicitly mentioned in this job description. Return ONLY a single comma-separated list of these skills (e.g., JavaScript, Agile, Project Management). Do not include any introductory text, outro, markdown formatting, or bullet points.\n\nJob Description:\n${jdText}`;
-                
-                const payload = {
-                    contents: [{ parts: [{ text: prompt }] }],
-                    tools: [{ "google_search": {} }]
-                };
-                
-                const apiKey = document.getElementById('api-key-input').value.trim();
-                if (!apiKey) {
-                    alert("Please enter your Gemini API Key at the top of the editor.");
-                    throw new Error("Missing API Key");
-                }
-                
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
-                
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                
-                if (!response.ok) throw new Error(`API returned status ${response.status}`);
-                
-                const responseText = await response.text();
-                if (!responseText) throw new Error("Empty API response");
-                
-                const result = JSON.parse(responseText);
-                if (result.error) throw new Error(result.error.message);
-                
-                const candidate = result.candidates?.[0];
-                
-                if (candidate && candidate.content?.parts?.[0]?.text) {
-                    const extractedSkills = candidate.content.parts[0].text.trim().replace(/^\s*,|,\s*$/g, '');
-                    
-                    const currentSkills = data.skills.trim();
-                    if (currentSkills) {
-                        const currentArr = currentSkills.split(',').map(s => s.trim()).filter(s => s);
-                        const newArr = extractedSkills.split(',').map(s => s.trim()).filter(s => s);
-                        const merged = [...new Set([...currentArr, ...newArr])];
-                        data.skills = merged.join(', ');
-                    } else {
-                        data.skills = extractedSkills;
-                    }
-                    
-                    document.getElementById('f-skills').value = data.skills;
-                    renderPreview();
-                    
-                    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><polyline points="20 6 9 17 4 12"></polyline></svg> Added Successfully!';
-                    btn.classList.replace('bg-purple-600', 'bg-green-600');
-                    btn.classList.replace('hover:bg-purple-700', 'hover:bg-green-700');
-                    
-                    setTimeout(() => {
-                        btn.innerHTML = originalText;
-                        btn.classList.replace('bg-green-600', 'bg-purple-600');
-                        btn.classList.replace('hover:bg-green-700', 'hover:bg-purple-700');
-                        btn.disabled = false;
-                    }, 2500);
-                    return;
-                }
-            } catch (e) {
-                console.error("Failed to extract skills", e);
-            }
-            
-            btn.innerHTML = 'Error. Try Again.';
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }, 3000);
-        }
-
-        async function proofreadCV() {
-            const apiKey = document.getElementById('api-key-input').value.trim();
-            if (!apiKey) {
-                alert("Please enter your Gemini API Key at the top of the editor to use the AI Proofreader.");
-                return;
-            }
-
-            const btn = document.getElementById('btn-proofread');
-            if (btn.disabled) return; 
-            
-            const originalHtml = btn.innerHTML;
-            btn.innerHTML = `<svg class="animate-spin h-4 w-4 mr-1 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span class="hidden sm:inline text-blue-700">Checking...</span>`;
-            btn.disabled = true;
-
-            try {
-                const prompt = `You are an expert copywriter and ATS resume optimizer. Review the following JSON resume data.
-1. Fix all spelling and grammatical errors.
-2. Improve sentence structure and professional tone.
-3. Ensure bullet points start with strong action verbs.
-4. DO NOT change personal details, contact info, dates, or factual information. 
-5. DO NOT change the JSON keys.
-6. YOU MUST return the entire JSON object, even if no changes are made.
-
-Return ONLY a valid JSON object matching the exact structure below. Do not add markdown formatting, conversational text, or explanations.
-
-Resume JSON:
-${JSON.stringify(data)}`;
-
-                const payload = { 
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { responseMimeType: "application/json" }
-                };
-                
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
-
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) {
-                    const errText = await response.text();
-                    let errMsg = `HTTP ${response.status}`;
-                    try { errMsg = JSON.parse(errText).error.message; } catch(e) {}
-                    throw new Error(errMsg);
-                }
-
-                const responseText = await response.text();
-                const result = JSON.parse(responseText);
-                
-                if (result.error) throw new Error(result.error.message);
-                if (!result.candidates || result.candidates.length === 0 || !result.candidates[0].content) {
-                    throw new Error("AI returned an empty response or blocked the request for safety reasons.");
-                }
-                
-                if (result.candidates[0].content && result.candidates[0].content.parts[0].text) {
-                    let jsonStr = result.candidates[0].content.parts[0].text;
-                    let parsedData;
-                    
-                    try {
-                        // First try parsing directly, stripping any accidental markdown the AI adds
-                        const cleanStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-                        parsedData = JSON.parse(cleanStr);
-                    } catch (e) {
-                        // Fallback: extract from boundaries if model hallucinates markdown or text
-                        const startIdx = jsonStr.indexOf('{');
-                        const endIdx = jsonStr.lastIndexOf('}');
-                        if (startIdx === -1 || endIdx === -1) {
-                            console.error("Raw AI Response:", jsonStr);
-                            throw new Error("AI failed to output a JSON object. Check console for details.");
-                        }
-                        
-                        try {
-                            parsedData = JSON.parse(jsonStr.substring(startIdx, endIdx + 1));
-                        } catch (parseErr) {
-                            console.error("JSON Parsing Error:", parseErr, "Raw String:", jsonStr.substring(startIdx, endIdx + 1));
-                            throw new Error("AI returned malformed JSON syntax.");
-                        }
-                    }
-                    
-                    if (!parsedData.personal) parsedData.personal = {};
-                    if (!parsedData.experience) parsedData.experience = [];
-                    if (!parsedData.education) parsedData.education = [];
-
-                    generateProofreadDiffs(parsedData);
-
-                    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-600"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span class="hidden sm:inline text-green-600">Done!</span>`;
-                } else {
-                    throw new Error("Invalid AI response structure");
-                }
-            } catch (err) {
-                console.error("Proofread Error:", err);
-                btn.innerHTML = `<span class="text-red-600 text-sm font-bold px-1">Error: Try Again</span>`;
-                alert("Proofread failed: " + err.message);
-            }
-
-            setTimeout(() => {
-                btn.innerHTML = originalHtml;
-                btn.disabled = false;
-            }, 3000);
-        }
-
-        // --- Proofread Diff & Modal Logic ---
-        let currentProofreadDiffs = [];
-
-        function generateProofreadDiffs(parsedData) {
-            currentProofreadDiffs = [];
-            
-            // Helper to strip purely invisible whitespace changes
-            const cleanStr = (s) => (s || '').toString().trim().replace(/\r\n/g, '\n');
-            const compare = (oldVal, newVal, label, applyFn) => {
-                if (cleanStr(oldVal) !== cleanStr(newVal)) {
-                    currentProofreadDiffs.push({ label, original: oldVal || '', suggested: newVal || '', apply: applyFn });
-                }
-            };
-
-            compare(data.summary, parsedData.summary, "Professional Summary", (val) => data.summary = val);
-            compare(data.skills, parsedData.skills, "Skills", (val) => data.skills = val);
-
-            // Compare Personal Info
-            ['fullName', 'jobTitle', 'email', 'phone', 'location', 'linkedin', 'github'].forEach(field => {
-                compare(data.personal[field], parsedData.personal[field], `Personal Info: ${field}`, (val) => data.personal[field] = val);
-            });
-
-            // Compare Experience blocks (mapped by index to avoid missing IDs)
-            data.experience.forEach((exp, i) => {
-                const newExp = parsedData.experience[i]; 
-                if (newExp) {
-                    ['title', 'company', 'location', 'description'].forEach(field => {
-                        compare(exp[field], newExp[field], `Experience (${exp.company || 'Role'}): ${field}`, (val) => {
-                            let target = data.experience.find(e => e.id === exp.id);
-                            if(target) target[field] = val;
-                        });
-                    });
-                }
-            });
-
-            // Compare Education blocks
-            data.education.forEach((edu, i) => {
-                const newEdu = parsedData.education[i];
-                if (newEdu) {
-                    ['degree', 'institution', 'location', 'gpa'].forEach(field => {
-                        compare(edu[field], newEdu[field], `Education (${edu.institution || 'School'}): ${field}`, (val) => {
-                            let target = data.education.find(e => e.id === edu.id);
-                            if(target) target[field] = val;
-                        });
-                    });
-                }
-            });
-
-            if (currentProofreadDiffs.length === 0) {
-                alert("AI didn't find any grammar or spelling issues. Your CV looks perfect!");
-                return;
-            }
-
-            renderProofreadModal();
-        }
-
-        function renderProofreadModal() {
-            const container = document.getElementById('proofread-diffs-container');
-            document.getElementById('proofread-select-all').checked = true;
-            
-            container.innerHTML = currentProofreadDiffs.map((diff, index) => `
-                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex space-x-4 items-start transition-colors hover:border-blue-300">
-                    <div class="pt-1 shrink-0">
-                        <input type="checkbox" class="diff-checkbox rounded text-blue-600 focus:ring-blue-500 w-5 h-5 cursor-pointer" data-index="${index}" checked>
-                    </div>
-                    <div class="flex-1 overflow-hidden">
-                        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">${escapeHtml(diff.label)}</h4>
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            <div class="bg-red-50/50 p-3 rounded-lg border border-red-100/50 relative">
-                                <span class="absolute -top-2.5 left-3 bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide shadow-sm">Original</span>
-                                <div class="text-sm text-slate-700 whitespace-pre-wrap break-words mt-1 line-through decoration-red-300/70">${escapeHtml(diff.original)}</div>
-                            </div>
-                            <div class="bg-green-50/50 p-3 rounded-lg border border-green-100/50 relative">
-                                <span class="absolute -top-2.5 left-3 bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide shadow-sm">Suggested</span>
-                                <div class="text-sm text-slate-800 whitespace-pre-wrap break-words mt-1">${escapeHtml(diff.suggested)}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-
-            document.getElementById('proofread-modal').classList.remove('hidden');
-        }
-
-        function toggleAllProofread(isChecked) {
-            document.querySelectorAll('.diff-checkbox').forEach(cb => cb.checked = isChecked);
-        }
-
-        function closeProofreadModal() {
-            document.getElementById('proofread-modal').classList.add('hidden');
-        }
-
-        function applySelectedProofread() {
-            const checkboxes = document.querySelectorAll('.diff-checkbox:checked');
-            let appliedCount = 0;
-            
-            checkboxes.forEach(cb => {
-                const idx = parseInt(cb.getAttribute('data-index'));
-                const diff = currentProofreadDiffs[idx];
-                if(diff) {
-                    diff.apply(diff.suggested);
-                    appliedCount++;
-                }
-            });
-
-            if (appliedCount > 0) {
-                // Instantly sync the approved changes back to the text inputs & preview
-                initFormValues();
-                renderExperienceForms();
-                renderEducationForms();
-                renderPreview();
-            }
-            
-            closeProofreadModal();
         }
     </script>
 </body>
