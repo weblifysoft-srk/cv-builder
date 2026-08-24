@@ -41,15 +41,15 @@
             /* Sets exact 0.75 inch margins on every printed page */
             @page { margin: 0.75in; } 
             
+        /* Print styles for generating PDF */
+        @media print {
+            body, html { width: 100%; height: auto !important; margin: 0; padding: 0; background: white; overflow: visible !important; }
+            @page { margin: 0; size: letter; }
             .print-hidden { display: none !important; }
             .print-block { display: block !important; width: 100% !important; max-width: none !important; }
             .print-no-shadow { box-shadow: none !important; border: none !important; }
             .print-p-0 { padding: 0 !important; }
-            
-            /* Hide the table headers/footers used for spacing */
             thead, tfoot { display: table-row-group; }
-            /* Hide empty space elements in print */
-            .print-spacing-hack { display: none; }
         }
     </style>
 </head>
@@ -269,25 +269,24 @@
                 <!-- ACTUAL RESUME DOCUMENT -->
                 <div class="bg-white shadow-2xl print-no-shadow w-full min-h-[1056px] text-black print-p-0" style="font-family: Georgia, 'Times New Roman', serif;">
                     
-                    <!-- Print Table Hack: Forces uniform margins on every printed page -->
+                    <!-- Print Table Hack: Forces uniform margins on every printed page while hiding browser headers/footers -->
                     <table class="w-full border-collapse border-0">
-                        <!-- Space for Top Margin -->
-                        <thead class="print-hidden"><tr><td style="height: 15mm;"></td></tr></thead>
+                        <thead class="print-hidden"><tr><td style="height: 0.75in;"></td></tr></thead>
                         <tbody>
                             <tr>
                                 <td class="p-10 sm:p-12 print-p-0 align-top">
-                                    <div id="resume-content">
+                                    <div id="resume-document">
                                         <!-- Content injected via JS -->
                                     </div>
                                 </td>
                             </tr>
                         </tbody>
-                        <!-- Space for Bottom Margin -->
-                        <tfoot class="print-hidden"><tr><td style="height: 15mm;"></td></tr></tfoot>
+                        <tfoot class="print-hidden"><tr><td style="height: 0.75in;"></td></tr></tfoot>
                     </table>
                 </div>
             </div>
         </section>
+
     </main>
 
     <script>
@@ -630,11 +629,11 @@ ${extractedText.substring(0, 15000)}`;
             } finally {
                 setTimeout(() => { btn.innerHTML = originalText; btn.disabled = false; }, 3000);
             }
-        }
+        } // <-- Added missing closing bracket here!
 
+        // --- Preview Rendering Logic ---
         function renderPreview() {
             const p = data.personal;
-            let html = `<header class="mb-6 pb-4 border-b-[1.5px] border-black text-center ${p.photo ? 'flex justify-between items-center text-left' : ''}">`;
             
             let contactHtml = `
                 <h1 class="text-3xl sm:text-4xl font-bold uppercase tracking-wide mb-2">${escapeHtml(p.fullName) || 'YOUR NAME'}</h1>
@@ -653,14 +652,16 @@ ${extractedText.substring(0, 15000)}`;
                 </div>
             `;
 
+            let html = `<header class="mb-6 pb-4 border-b-[1.5px] border-black ${p.photo ? 'flex justify-between items-center text-left' : 'text-center'}">`;
+            
             if (p.photo) {
                 html += `<div class="flex-1">${contactHtml}</div><img src="${p.photo}" class="w-24 h-32 object-cover ml-6 border border-gray-300 shadow-sm" alt="Profile">`;
             } else {
-                html += `<div>${contactHtml}</div>`;
+                html += `<div class="w-full">${contactHtml}</div>`;
             }
             html += `</header>`;
 
-            if (data.summary && data.summary.trim()) {
+            if (data.summary.trim()) {
                 html += `
                     <section class="mb-6 break-inside-avoid">
                         <h2 class="text-lg font-bold uppercase tracking-widest border-b border-gray-300 mb-3 pb-1 text-gray-900">Professional Summary</h2>
@@ -714,7 +715,7 @@ ${extractedText.substring(0, 15000)}`;
                 `;
             }
 
-            document.getElementById('resume-content').innerHTML = html;
+            document.getElementById('resume-document').innerHTML = html;
         }
 
         function downloadPDF() {
